@@ -87,6 +87,12 @@ export function el(tag, attrs = {}, ...children) {
 export function joinedSeats(students, session) {
   return Object.entries(students || {}).filter(([, v]) => v && session && v.s === session).map(([k]) => k).sort((a, b) => +a - +b);
 }
+// 倒數計時：老師按下去時寫 end（結束的時間點），各畫面用自己的時鐘算剩幾秒。手機與投影電腦都會自動對時，差一兩秒沒關係。
+export function timerLeft(timer) {
+  if (!timer || !timer.end) return null;
+  return Math.max(0, Math.ceil((timer.end - Date.now()) / 1000));
+}
+export function fmtTime(sec) { return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
 export const OPTION_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']; // 選項 A～D 的顏色（dataviz 規範驗證過）
 export const OPTION_INK = ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b'];
 export const LETTERS = ['A', 'B', 'C', 'D'];

@@ -12,7 +12,7 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats } from './store.js';
+import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats, timerLeft, fmtTime } from './store.js';
 import { SETS, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
@@ -55,8 +55,8 @@ async function main() {
 
   // ---- 狀態 ----
   // qid＝現在出的題、open＝開放作答、show＝投影顯示結果、screen＝待機時投影放什麼（qr 掃碼／cover 平板蓋上）、
-  // spot＝投影放大的那一句（座號）、last＝最後出過的題（收題後「下一題」接得下去）、session＝回合
-  function fresh() { return { set: setId, qid: null, open: false, show: false, screen: 'qr', spot: null, last: null, session: String(Date.now()), n: N, at: Date.now() }; }
+  // spot＝投影放大的那一句（座號）、last＝最後出過的題（收題後「下一題」接得下去）、timer＝倒數（{secs, end}）、session＝回合
+  function fresh() { return { set: setId, qid: null, open: false, show: false, screen: 'qr', spot: null, last: null, timer: null, session: String(Date.now()), n: N, at: Date.now() }; }
   let state = await store.once('state');
   if (!state || !state.session) {
     state = fresh();
@@ -79,14 +79,19 @@ async function main() {
   // ---- 操作（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
   const indexOf = (id) => SET.questions.findIndex((x) => x.id === id);
   const pos = () => (state.qid ? indexOf(state.qid) : state.last ? indexOf(state.last) : -1);
-  const showQ = (q) => push({ ...state, qid: q.id, last: q.id, open: true, show: q.type === 'text', spot: null });
+  const showQ = (q) => push({ ...state, qid: q.id, last: q.id, open: true, show: q.type === 'text', spot: null, timer: null });
   const next = () => { const q = SET.questions[pos() + 1]; if (q) showQ(q); };
   const prev = () => { const q = SET.questions[pos() - 1]; if (q) showQ(q); };
-  const close = () => push({ ...state, qid: null, open: false, show: false, spot: null, screen: 'cover' });
-  const showQr = () => push({ ...state, qid: null, open: false, show: false, spot: null, screen: 'qr' });
+  const close = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'cover' });
+  const showQr = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'qr' });
+  const startTimer = (secs) => push({ ...state, timer: { secs, end: Date.now() + secs * 1000 } });
+  const stopTimer = () => push({ ...state, timer: null });
 
   let answers = {}, students = {}, unsubAns = null;
-  const opened = { list: true, link: false, tools: false }; // 摺疊區開關（重畫時保留）
+  let ui = {}; // 每半秒就地更新的元件（倒數數字），不整頁重畫
+  const wide = window.matchMedia('(min-width: 960px)').matches; // 筆電：兩欄，連線區預設打開
+  const opened = { list: true, link: wide, tools: false }; // 摺疊區開關（重畫時保留）
+  setInterval(tick, 500);
   store.on('students', (s) => { students = s || {}; draw(); });
   store.on('state', (s) => {
     if (!s) return;
@@ -115,24 +120,27 @@ async function main() {
 
     // 現在這題 ＋ 遙控按鈕
     let now;
+    ui = {};
     if (!q) {
       const cover = state.screen === 'cover';
       now = el('div', { class: 'card now' },
         el('div', { class: 'q-tag' }, '待機中'),
-        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : '投影幕：掃碼畫面（QR code）'),
+        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : '投影幕：QR CODE（掃碼加入）'),
         el('div', { class: 'row btns' },
           el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ ${pos() < 0 ? '出第 1 題' : '下一題'}：${nextQ.tag || nextQ.text}` : '題目出完了'),
         ),
         el('div', { class: 'row', style: 'margin-top:8px' },
-          cover ? el('button', { class: 'small', onclick: showQr }, '投影改回掃碼畫面') : el('button', { class: 'small', onclick: close }, '投影改成「平板蓋上」'),
+          cover ? el('button', { class: 'small', onclick: showQr }, '投影：顯示 QR CODE') : el('button', { class: 'small', onclick: close }, '投影：平板蓋上'),
           pos() >= 0 ? el('button', { class: 'small', onclick: () => showQ(SET.questions[pos()]) }, `◀ 回到剛才那題`) : null,
         ),
       );
     } else {
       const pct = joined ? Math.round(answered / joined * 100) : 0;
+      // 按鈕順序照老婆定的：出題 → 關閉作答 → 顯示結果 → 下一題；輪到哪一步，那顆就亮黃色
+      const step = state.open ? 'close' : (q.type === 'choice' && !state.show) ? 'show' : 'next';
       now = el('div', { class: 'card now' },
-        el('div', { class: 'row' },
-          el('div', { class: 'q-tag grow' }, `第 ${i + 1}／${SET.questions.length} 題　${q.tag || ''}`),
+        el('div', { class: 'row', style: 'gap:6px' },
+          el('div', { class: 'q-tag', style: 'margin-right:4px' }, `第 ${i + 1}／${SET.questions.length} 題　${q.tag || ''}`),
           el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '已關閉'),
           q.type === 'choice'
             ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數')
@@ -141,9 +149,10 @@ async function main() {
         el('div', { class: 'q-text' }, q.text),
         el('div', { class: 'count' }, el('b', {}, answered), ` / ${joined} 已作答`),
         el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
+        timerRow(),
         el('div', { class: 'row btns' },
-          q.type === 'choice' ? el('button', { class: 'big grow ' + (state.show ? '' : 'accent'), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
-          el('button', { class: 'big grow', onclick: () => push({ ...state, open: !state.open }) }, state.open ? '關閉作答' : '開放作答'),
+          el('button', { class: 'big grow' + (step === 'close' ? ' accent' : ''), onclick: () => push({ ...state, open: !state.open, timer: state.open ? null : state.timer }) }, state.open ? '關閉作答' : '開放作答'),
+          q.type === 'choice' ? el('button', { class: 'big grow' + (step === 'show' ? ' accent' : ''), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
         ),
         el('div', { class: 'row btns' },
           el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ 下一題：${nextQ.tag || nextQ.text}` : '已是最後一題'),
@@ -192,8 +201,26 @@ async function main() {
         el('span', { class: 'muted small' }, `回合 ${state.session}`),
       ));
 
-    app.replaceChildren(bar, now, list, link, tools);
+    app.replaceChildren(bar, el('div', { class: 'cols' }, el('div', { class: 'col' }, now), el('div', { class: 'col' }, list, link, tools)));
     if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 140, height: 140 });
+  }
+
+  // 倒數：沒開 → 1／2／3 分三顆；開了 → 剩幾秒＋停止（數字由 tick 每半秒就地更新）
+  function timerRow() {
+    if (!state.timer) {
+      return el('div', { class: 'row timer-row' }, el('span', { class: 'muted small' }, '⏱ 投影倒數'),
+        [1, 2, 3].map((m) => el('button', { class: 'small', onclick: () => startTimer(m * 60) }, `${m} 分`)));
+    }
+    ui.timer = el('span', { class: 'timer' });
+    const row = el('div', { class: 'row timer-row' }, ui.timer, el('button', { class: 'small', onclick: stopTimer }, timerLeft(state.timer) > 0 ? '停止倒數' : '清掉'));
+    tick();
+    return row;
+  }
+  function tick() {
+    if (!ui.timer || !state || !state.timer) return;
+    const left = timerLeft(state.timer);
+    ui.timer.textContent = left > 0 ? `⏱ ${fmtTime(left)}` : '⏱ 時間到（投影在閃）';
+    ui.timer.className = 'timer' + (left <= 10 ? ' urgent' : '') + (left === 0 ? ' over' : '');
   }
 
   function section(key, title, ...kids) {

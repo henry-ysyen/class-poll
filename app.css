@@ -79,9 +79,24 @@ details.card summary { cursor: pointer; font-weight: 700; color: var(--navy); }
 .qrow.cur { background: #fff8e1; border-color: var(--warn); }
 .qrow .qn { width: 26px; height: 26px; border-radius: 50%; background: #efeee9; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
 #qr { background: #fff; padding: 10px; display: inline-block; border: 1px solid var(--line); border-radius: 10px; }
+.timer-row { margin-top: 8px; }
+.timer { font-size: 26px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.timer.urgent { color: var(--bad); }
+/* 筆電版：寬度夠就分兩欄，左邊遙控、右邊題目清單與連線 */
+.cols { display: block; }
+@media (min-width: 960px) {
+  .teacher { max-width: 1240px; }
+  .cols { display: grid; grid-template-columns: 7fr 5fr; gap: 16px; align-items: start; }
+  .cols .col:first-child { position: sticky; top: 16px; }
+}
 
 /* 投影頁 */
-body.screen { padding: 24px 40px; min-height: 100vh; }
+body.screen { padding: 24px 40px 130px; min-height: 100vh; }
+.screen .timer { font-size: 60px; line-height: 1.1; margin-bottom: 4px; }
+.screen .timer.over { animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.hintbar { position: fixed; left: 0; right: 0; bottom: 0; padding: 20px 40px; text-align: center; font-size: 38px; font-weight: 700; background: #fff6d6; color: #7a3e00; border-top: 6px solid var(--warn); }
+.hintbar.closed { background: #fbe5d6; color: #8a3b12; border-top-color: var(--bad); }
 .screen .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .screen .q-tag { font-size: 22px; }
 .screen .q-text { font-size: 44px; margin: 8px 0 24px; }

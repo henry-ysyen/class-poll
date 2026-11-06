@@ -77,7 +77,7 @@ async function main() {
       app.replaceChildren(head(), el('div', { class: 'card idle' },
         el('div', { class: 'big-seat' }, seat),
         el('div', { class: 'idle-text' }, cover ? '請把平板蓋上' : '已加入 ✓'),
-        el('div', { class: 'muted', style: 'font-size:20px' }, cover ? '眼睛看老師' : '等老師出題'),
+        el('div', { class: 'muted', style: 'font-size:22px' }, cover ? '眼睛看老師' : '請把平板蓋上，眼睛看老師'),
       ));
       return;
     }

@@ -11,7 +11,7 @@
 <body class="screen">
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats } from './store.js';
+import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats, timerLeft, fmtTime } from './store.js';
 import { SETS, DEFAULT_ROOM } from './questions.js';
 
 const app = $('#app');
@@ -21,6 +21,8 @@ main();
 async function main() {
   const store = await createStore(room);
   let state = null, answers = {}, students = {}, unsubAns = null, lastSession = null;
+  let timerEl = null; // 倒數數字：每半秒就地更新，不整頁重畫
+  setInterval(tick, 500);
   const base = location.href.replace(/[^/]*$/, '');
   const studentUrl = `${base}index.html${room === DEFAULT_ROOM ? '' : '?r=' + encodeURIComponent(room)}`;
 
@@ -51,13 +53,20 @@ async function main() {
     const cur = answers[q.id] || {};
     const answered = Object.keys(cur).length;
     const pct = joined ? Math.round(answered / joined * 100) : 0;
+    timerEl = state.timer ? el('div', { class: 'timer' }) : null;
     const top = el('div', { class: 'top' },
       el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q.tag || ''), el('div', { class: 'q-text' }, q.text)),
       el('div', { class: 'counter' },
+        timerEl,
         el('div', {}, el('b', {}, answered), ` / ${joined} 已作答`),
         el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
         el('div', { class: 'small-state' }, state.open ? '作答中' : '作答結束')),
     );
+    tick();
+    // 最下面一條指示（老婆要的：放大、上色，作答結束也一樣）
+    const bar = hintbar(state.open
+      ? (q.type === 'text' ? '在平板上打一句，按送出。' : '在平板上選一個，點了就送出。結果等老師公布。')
+      : '作答結束，眼睛看老師。', state.open);
 
     // 開放題：句子即時出現；老師在手機上點的那句放大在最上面
     if (q.type === 'text') {
@@ -67,13 +76,14 @@ async function main() {
         spot ? el('div', { class: 'spotlight' }, spot.v) : null,
         items.length
           ? el('div', { class: 'cards' }, items.map(([seat, a]) => el('div', { class: 'cardt' + (state.spot === seat ? ' spot' : '') }, a.v)))
-          : el('div', { class: 'wait' }, '等大家的句子……'));
+          : el('div', { class: 'wait' }, '等大家的句子……'),
+        bar);
       return;
     }
 
     // 選擇題：結果公布前，投影只放題目、選項和人數
     if (!state.show) {
-      app.replaceChildren(top, optionList(q), el('div', { class: 'hint' }, state.open ? '在平板上選一個，點了就送出。結果等老師公布。' : '作答結束，結果等老師公布。'));
+      app.replaceChildren(top, optionList(q), bar);
       return;
     }
     if (q.compareWith) {
@@ -97,9 +107,9 @@ async function main() {
       el('div', { class: 'qr-wrap' },
         el('div', { id: 'qr' }),
         el('div', {},
-          el('div', { class: 'step' }, '① 掃這個 QR code'),
+          el('div', { class: 'step' }, '① 平板相機對準 QR code，點出現的網址'),
           el('div', { class: 'step' }, '② 按自己的座號'),
-          el('div', { class: 'step' }, '③ 等老師出題'),
+          el('div', { class: 'step' }, '③ 座號亮了，就把平板蓋上、眼睛看老師'),
           el('div', { class: 'hint', style: 'margin-top:20px' }, '掃不了就打網址：', el('code', { style: 'font-size:22px;word-break:break-all' }, studentUrl)),
         ),
       ),
@@ -115,6 +125,14 @@ async function main() {
       el('div', { class: 'corner' }, el('div', { id: 'qr' }), el('div', { class: 'hint', style: 'margin-top:6px;font-size:18px' }, `${joined} 人已加入`)),
     );
     if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 120, height: 120 });
+  }
+
+  function hintbar(text, open) { return el('div', { class: 'hintbar' + (open ? '' : ' closed') }, text); }
+  function tick() {
+    if (!timerEl || !state || !state.timer) return;
+    const left = timerLeft(state.timer);
+    timerEl.textContent = left > 0 ? `⏱ ${fmtTime(left)}` : '時間到';
+    timerEl.className = 'timer' + (left <= 10 ? ' urgent' : '') + (left === 0 ? ' over' : '');
   }
 
   function optionList(q) {
