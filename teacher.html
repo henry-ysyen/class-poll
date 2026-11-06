@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>老師控制台</title>
+<title>老師遙控器</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="app.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -12,21 +12,21 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $ } from './store.js';
-import { SETS } from './questions.js';
+import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats } from './store.js';
+import { SETS, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
-const room = qs('r');
+const room = qs('r', DEFAULT_ROOM);
 const setId = qs('set', 'L2');
-const N = Math.max(1, Math.min(60, +qs('n', 30) || 30));
+const N = Math.max(1, Math.min(60, +qs('n', DEFAULT_N) || DEFAULT_N));
 const SET = SETS[setId];
 
-if (!room || !SET) {
+if (!SET) {
   app.replaceChildren(el('div', { class: 'card' },
-    el('h1', {}, '老師控制台'),
-    el('p', {}, '網址要帶教室代碼和題組，例如：'),
-    el('code', {}, 'teacher.html?r=418&set=L2&n=21'),
-    el('p', { class: 'muted small' }, 'r＝教室代碼（學生掃碼後進同一間）、set＝題組（L1 第 1 節實測、L2 第 2 節）、n＝座號到幾號'),
+    el('h1', {}, '老師遙控器'),
+    el('p', {}, `找不到題組「${setId}」。網址例如：`),
+    el('code', {}, 'teacher.html?set=L2'),
+    el('p', { class: 'muted small' }, `set＝題組（${Object.keys(SETS).join('、')}）；r＝教室代碼（預設 ${DEFAULT_ROOM}）；n＝座號到幾號（預設 ${DEFAULT_N}）`),
   ));
 } else {
   main();
@@ -36,17 +36,17 @@ async function main() {
   const store = await createStore(room);
   if (store.mode === 'local') $('#banner').replaceChildren(el('div', { class: 'banner' }, '本機模式：只在這台電腦的瀏覽器分頁之間同步（試流程用）。要讓平板連進來，見 README 的上線步驟。'));
 
-  // ---- PIN ----
+  // ---- 老師密碼（這支手機／電腦記住，下次不用再打）----
   const PIN_KEY = `classpoll:pin:${room}`;
-  let pin = sessionStorage.getItem(PIN_KEY);
+  let pin = localStorage.getItem(PIN_KEY);
   if (!pin) {
     await new Promise((resolve) => {
       app.replaceChildren(el('div', { class: 'card' },
-        el('h1', {}, `老師控制台 · 教室 ${room}`),
-        el('p', {}, '設定或輸入老師密碼（4 個字以上；第一次用會記住）：'),
+        el('h1', {}, `老師遙控器 · 教室 ${room}`),
+        el('p', {}, '輸入老師密碼（4 個字以上）。第一個用的人設定，之後都打同一組；這台裝置會記住。'),
         el('input', { id: 'pin', type: 'password', placeholder: '老師密碼' }),
         el('div', { style: 'height:10px' }),
-        el('button', { class: 'primary big', onclick: () => { const v = $('#pin').value.trim(); if (v.length >= 4) { pin = v; sessionStorage.setItem(PIN_KEY, v); resolve(); } } }, '進入'),
+        el('button', { class: 'primary big', onclick: () => { const v = $('#pin').value.trim(); if (v.length >= 4) { pin = v; localStorage.setItem(PIN_KEY, v); resolve(); } } }, '進入'),
       ));
     });
   }
@@ -54,9 +54,12 @@ async function main() {
   if (store.mode === 'firebase') { try { await store.set('config/pin', pin); } catch {} }
 
   // ---- 狀態 ----
+  // qid＝現在出的題、open＝開放作答、show＝投影顯示結果、screen＝待機時投影放什麼（qr 掃碼／cover 平板蓋上）、
+  // spot＝投影放大的那一句（座號）、last＝最後出過的題（收題後「下一題」接得下去）、session＝回合
+  function fresh() { return { set: setId, qid: null, open: false, show: false, screen: 'qr', spot: null, last: null, session: String(Date.now()), n: N, at: Date.now() }; }
   let state = await store.once('state');
   if (!state || !state.session) {
-    state = { set: setId, qid: null, open: false, show: false, session: String(Date.now()), n: N, at: Date.now() };
+    state = fresh();
     await push(state);
   } else if (state.set !== setId || state.n !== N) {
     await push({ ...state, set: setId, n: N });
@@ -64,17 +67,26 @@ async function main() {
   async function push(next) {
     next = { ...next, at: Date.now() };
     try { await store.update('', { token: pin, state: next }); }
-    catch (e) { alert('寫入失敗：老師密碼可能不對，或資料庫規則沒設好。\n' + e.message); throw e; }
+    catch (e) { alert('寫入失敗：老師密碼可能不對（「工具」裡有「換密碼」），或資料庫規則沒設好。\n' + e.message); throw e; }
   }
 
-  // ---- 網址與 QR（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
+  // ---- 網址（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
   const base = location.href.replace(/[^/]*$/, '');
-  const studentUrl = `${base}index.html?r=${encodeURIComponent(room)}&n=${N}`;
-  const screenUrl = `${base}screen.html?r=${encodeURIComponent(room)}`;
+  const param = room === DEFAULT_ROOM ? '' : '?r=' + encodeURIComponent(room);
+  const studentUrl = `${base}index.html${param}`;
+  const screenUrl = `${base}screen.html${param}`;
 
-  let answers = {};
-  let students = {};
-  let unsubAns = null;
+  // ---- 操作（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
+  const indexOf = (id) => SET.questions.findIndex((x) => x.id === id);
+  const pos = () => (state.qid ? indexOf(state.qid) : state.last ? indexOf(state.last) : -1);
+  const showQ = (q) => push({ ...state, qid: q.id, last: q.id, open: true, show: q.type === 'text', spot: null });
+  const next = () => { const q = SET.questions[pos() + 1]; if (q) showQ(q); };
+  const prev = () => { const q = SET.questions[pos() - 1]; if (q) showQ(q); };
+  const close = () => push({ ...state, qid: null, open: false, show: false, spot: null, screen: 'cover' });
+  const showQr = () => push({ ...state, qid: null, open: false, show: false, spot: null, screen: 'qr' });
+
+  let answers = {}, students = {}, unsubAns = null;
+  const opened = { list: true, link: false, tools: false }; // 摺疊區開關（重畫時保留）
   store.on('students', (s) => { students = s || {}; draw(); });
   store.on('state', (s) => {
     if (!s) return;
@@ -88,67 +100,134 @@ async function main() {
   });
 
   function draw() {
-    const q = state.qid ? SET.questions.find((x) => x.id === state.qid) : null;
+    const i = state.qid ? indexOf(state.qid) : -1;
+    const q = i >= 0 ? SET.questions[i] : null;
+    const nextQ = SET.questions[pos() + 1] || null;
     const cur = q ? (answers[q.id] || {}) : {};
     const answered = Object.keys(cur).length;
-    const joined = Object.keys(students).length;
+    const joinedList = joinedSeats(students, state.session);
+    const joined = joinedList.length;
 
-    // 卡 1：連線資訊
-    const info = el('div', { class: 'card' },
-      el('div', { class: 'row' },
-        el('div', { class: 'grow' },
-          el('h1', {}, `老師控制台 · 教室 ${room}`),
-          el('div', { class: 'muted' }, SET.title, `　座號 1～${N}`),
-          el('div', { style: 'margin-top:8px' }, '學生頁網址：', el('code', { style: 'user-select:all;word-break:break-all' }, studentUrl)),
-          el('div', { style: 'margin-top:6px' }, el('a', { href: screenUrl, target: '_blank' }, '開投影頁（另開分頁，拖到投影機那個螢幕）')),
-          el('div', { style: 'margin-top:10px' }, el('span', { class: 'kpi' }, joined), el('span', { class: 'muted' }, ' 人已加入')),
+    // 標題列
+    const bar = el('div', { class: 'topbar' },
+      el('div', { class: 'grow' }, el('b', {}, SET.title), el('div', { class: 'muted small' }, `教室 ${room}　座號 1～${N}　`, el('span', { class: 'pill' }, `${joined} 人已加入`))),
+    );
+
+    // 現在這題 ＋ 遙控按鈕
+    let now;
+    if (!q) {
+      const cover = state.screen === 'cover';
+      now = el('div', { class: 'card now' },
+        el('div', { class: 'q-tag' }, '待機中'),
+        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : '投影幕：掃碼畫面（QR code）'),
+        el('div', { class: 'row btns' },
+          el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ ${pos() < 0 ? '出第 1 題' : '下一題'}：${nextQ.tag || nextQ.text}` : '題目出完了'),
         ),
-        el('div', { id: 'qr' }),
-      ),
-    );
+        el('div', { class: 'row', style: 'margin-top:8px' },
+          cover ? el('button', { class: 'small', onclick: showQr }, '投影改回掃碼畫面') : el('button', { class: 'small', onclick: close }, '投影改成「平板蓋上」'),
+          pos() >= 0 ? el('button', { class: 'small', onclick: () => showQ(SET.questions[pos()]) }, `◀ 回到剛才那題`) : null,
+        ),
+      );
+    } else {
+      const pct = joined ? Math.round(answered / joined * 100) : 0;
+      now = el('div', { class: 'card now' },
+        el('div', { class: 'row' },
+          el('div', { class: 'q-tag grow' }, `第 ${i + 1}／${SET.questions.length} 題　${q.tag || ''}`),
+          el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '已關閉'),
+          q.type === 'choice'
+            ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數')
+            : el('span', { class: 'pill on' }, '投影：句子即時出現'),
+        ),
+        el('div', { class: 'q-text' }, q.text),
+        el('div', { class: 'count' }, el('b', {}, answered), ` / ${joined} 已作答`),
+        el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
+        el('div', { class: 'row btns' },
+          q.type === 'choice' ? el('button', { class: 'big grow ' + (state.show ? '' : 'accent'), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
+          el('button', { class: 'big grow', onclick: () => push({ ...state, open: !state.open }) }, state.open ? '關閉作答' : '開放作答'),
+        ),
+        el('div', { class: 'row btns' },
+          el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ 下一題：${nextQ.tag || nextQ.text}` : '已是最後一題'),
+        ),
+        el('div', { class: 'row', style: 'margin-top:8px' },
+          el('button', { class: 'small', disabled: i > 0 ? null : 'disabled', onclick: prev }, '◀ 上一題'),
+          el('button', { class: 'small', onclick: close }, '收題（投影：平板蓋上）'),
+        ),
+        chips(cur, joinedList),
+        q.type === 'choice' ? miniBars(q, cur) : sentences(q, cur),
+      );
+    }
 
-    // 卡 2：現在這題
-    const chips = el('div', { class: 'chips' });
-    for (let i = 1; i <= N; i++) chips.append(el('span', { class: 'chip' + (cur[String(i)] ? ' done' : '') }, i));
-    const now = el('div', { class: 'card' },
-      el('div', { class: 'row' },
-        el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q ? (q.tag || '') : ''), el('div', { class: 'q-text' }, q ? q.text : '（還沒出題）')),
-        q ? el('div', { class: 'kpi' }, `${answered}`, el('span', { class: 'muted', style: 'font-size:18px' }, ` / ${joined} 已作答`)) : null,
-      ),
-      q ? el('div', { class: 'row', style: 'margin:10px 0' },
-        el('button', { class: 'big ' + (state.open ? 'danger' : 'primary'), onclick: () => push({ ...state, open: !state.open }) }, state.open ? '關閉作答' : '開放作答'),
-        q.type === 'choice' ? el('button', { class: 'big', onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : el('span', { class: 'muted small' }, '開放題：句子會即時出現在投影幕'),
-        el('button', { onclick: () => push({ ...state, qid: null, open: false, show: false }) }, '收題（回到等待畫面）'),
-        el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '未開放'),
-        q.type === 'choice' ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數') : null,
-      ) : null,
-      q ? chips : null,
-    );
-
-    // 卡 3：題目列表
-    const tbl = el('table', { class: 'qlist' }, el('tr', {}, el('th', {}, '#'), el('th', {}, '段落'), el('th', {}, '題目'), el('th', {}, '已答'), el('th', {}, '')));
-    SET.questions.forEach((x, i) => {
+    // 題目清單（跳題用）
+    const tbl = el('div', { class: 'qlist' });
+    SET.questions.forEach((x, k) => {
       const n = Object.keys(answers[x.id] || {}).length;
-      tbl.append(el('tr', { class: q && q.id === x.id ? 'cur' : '' },
-        el('td', {}, i + 1), el('td', { class: 'muted small' }, x.tag || ''), el('td', {}, x.text, x.type === 'text' ? el('span', { class: 'muted small' }, '（開放題）') : null),
-        el('td', {}, n || ''),
-        el('td', {}, el('button', { class: q && q.id === x.id ? '' : 'primary', onclick: () => push({ ...state, qid: x.id, open: true, show: x.type === 'text' }) }, q && q.id === x.id ? '出題中' : '出這題')),
+      const isCur = !!(q && q.id === x.id);
+      tbl.append(el('div', { class: 'qrow' + (isCur ? ' cur' : '') },
+        el('div', { class: 'qn' }, k + 1),
+        el('div', { class: 'grow' },
+          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : '') + (n ? `　${n} 人答過` : '')),
+          el('div', {}, x.text)),
+        el('button', { class: isCur ? 'small' : 'small primary', disabled: isCur ? 'disabled' : null, onclick: () => showQ(x) }, isCur ? '出題中' : '出這題'),
       ));
     });
-    const list = el('div', { class: 'card' }, el('h1', {}, '題目'), el('p', { class: 'muted small' }, '按「出這題」＝立刻出題並開放作答。選擇題預設只顯示人數，討論時再按「顯示結果」。'), tbl);
+    const list = section('list', '題目清單（跳題用）', tbl);
 
-    // 卡 4：工具
-    const tools = el('div', { class: 'card' },
-      el('h1', {}, '工具'),
-      el('div', { class: 'row' },
-        el('button', { onclick: exportCsv }, '匯出這回合的答案（CSV）'),
-        el('button', { class: 'danger', onclick: () => { if (confirm('開新回合會把投影和計數歸零（舊答案還在資料庫裡，匯出時可選）。確定？')) push({ ...state, qid: null, open: false, show: false, session: String(Date.now()) }); } }, '新回合（試教完、正式上課前按）'),
-        el('span', { class: 'muted small' }, `回合 ${state.session}`),
-      ),
+    // 連線
+    const link = section('link', '連線：QR code、網址、投影頁',
+      el('div', { class: 'row', style: 'margin-top:10px;align-items:flex-start' },
+        el('div', { id: 'qr' }),
+        el('div', { class: 'grow' },
+          el('div', {}, '學生頁：', el('code', { style: 'user-select:all;word-break:break-all' }, studentUrl)),
+          el('div', { style: 'margin-top:8px' }, el('a', { href: screenUrl, target: '_blank' }, '開投影頁（另開分頁，拖到投影機那個螢幕）')),
+          el('div', { class: 'muted small', style: 'margin-top:8px' }, '已加入的座號：', joinedList.join('、') || '（還沒有人）'),
+        )),
     );
 
-    app.replaceChildren(info, now, list, tools);
-    if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 160, height: 160 });
+    // 工具
+    const tools = section('tools', '工具：匯出、新回合、換密碼',
+      el('div', { class: 'row', style: 'margin-top:10px' },
+        el('button', { onclick: exportCsv }, '匯出這回合的答案（CSV）'),
+        el('button', { class: 'danger', onclick: () => { if (confirm('開新回合：投影與計數歸零（舊答案還在資料庫，匯出時還拿得到）；學生平板不用重掃。試教完、正式上課前按。確定？')) push(fresh()); } }, '新回合'),
+        el('button', { onclick: () => { localStorage.removeItem(PIN_KEY); location.reload(); } }, '換密碼'),
+        el('span', { class: 'muted small' }, `回合 ${state.session}`),
+      ));
+
+    app.replaceChildren(bar, now, list, link, tools);
+    if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 140, height: 140 });
+  }
+
+  function section(key, title, ...kids) {
+    const d = el('details', { class: 'card' }, el('summary', {}, title), ...kids);
+    if (opened[key]) d.setAttribute('open', '');
+    d.addEventListener('toggle', () => { opened[key] = d.open; });
+    return d;
+  }
+  function chips(cur, joinedList) {
+    const joined = new Set(joinedList);
+    const c = el('div', { class: 'chips' });
+    for (let s = 1; s <= N; s++) {
+      const k = String(s);
+      c.append(el('span', { class: 'chip' + (cur[k] ? ' done' : joined.has(k) ? ' in' : '') }, s));
+    }
+    return el('div', { style: 'margin-top:12px' }, c, el('div', { class: 'muted small', style: 'margin-top:4px' }, '綠＝答了　白＝加入了還沒答　灰＝沒加入'));
+  }
+  function miniBars(q, cur) {
+    const counts = q.options.map(() => 0);
+    for (const a of Object.values(cur)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
+    const total = Math.max(1, counts.reduce((s, c) => s + c, 0));
+    return el('div', { class: 'mini' },
+      el('div', { class: 'muted small' }, '分布（只有你看得到；投影要按「顯示結果」才出長條圖）'),
+      q.options.map((opt, i) => el('div', { class: 'mini-row' },
+        el('span', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]),
+        el('div', { class: 'mini-track' }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${OPTION_COLORS[i]}` }), el('span', { class: 'mini-label' }, opt)),
+        el('b', {}, counts[i]))));
+  }
+  function sentences(q, cur) {
+    const items = Object.entries(cur).sort((a, b) => a[1].t - b[1].t);
+    const hint = el('div', { class: 'muted small' }, items.length ? '點一句 → 投影幕放大那句（再點一次取消）。座號只有你看得到。' : '句子送進來會列在這裡（附座號）。點一句，投影幕就放大那句。');
+    return el('div', { class: 'mini' }, hint,
+      items.map(([seat, a]) => el('div', { class: 'sent' + (state.spot === seat ? ' spot' : ''), onclick: () => push({ ...state, spot: state.spot === seat ? null : seat }) },
+        el('span', { class: 'seat-no' }, seat), el('span', {}, a.v))));
   }
 
   function exportCsv() {

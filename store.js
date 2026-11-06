@@ -83,6 +83,10 @@ export function el(tag, attrs = {}, ...children) {
   for (const c of children.flat()) if (c != null) n.append(c.nodeType ? c : document.createTextNode(String(c)));
   return n;
 }
+// 這一回合已加入的座號：學生頁每次看到回合編號變了就重新報到（students/<seat> 的 s），所以用回合比對、不比時間（平板時鐘不一定準）
+export function joinedSeats(students, session) {
+  return Object.entries(students || {}).filter(([, v]) => v && session && v.s === session).map(([k]) => k).sort((a, b) => +a - +b);
+}
 export const OPTION_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']; // 選項 A～D 的顏色（dataviz 規範驗證過）
 export const OPTION_INK = ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b'];
 export const LETTERS = ['A', 'B', 'C', 'D'];

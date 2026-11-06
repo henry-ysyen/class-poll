@@ -1,6 +1,11 @@
 // 題庫：一個「題組」對應一節課。老師頁用網址 ?set=L2 選題組。
 // type: 'choice'＝單選（最多 4 個選項）、'text'＝開放題（學生打一句，prefix 會自動接在前面）
 // compareWith: 投影頁把這題和指定的題並排（前測／後測對照）
+
+// 班級設定：網址沒帶 r／n 時就用這兩個。學生只要開 index.html（不用任何參數）就進得來，QR code 比較短。
+export const DEFAULT_ROOM = '418';
+export const DEFAULT_N = 21;
+
 export const SETS = {
   L1: {
     title: '第 1 節　閉眼聽（平板實測）',
