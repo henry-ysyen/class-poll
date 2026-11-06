@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課堂問卷</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="student">
+<div id="banner"></div>
+<div id="app"><div class="wait">載入中…</div></div>
+<script type="module">
+import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS } from './store.js';
+import { findQuestion } from './questions.js';
+
+const app = $('#app');
+const room = qs('r');
+const N = Math.max(1, Math.min(60, +qs('n', 30) || 30));
+
+// 沒有教室代碼：讓學生打
+if (!room) {
+  app.replaceChildren(el('div', { class: 'card' },
+    el('h1', {}, '課堂問卷'),
+    el('p', {}, '請輸入老師給的教室代碼：'),
+    el('input', { id: 'room', placeholder: '例如 418', inputmode: 'numeric' }),
+    el('div', { style: 'height:10px' }),
+    el('button', { class: 'primary big', onclick: () => { const v = $('#room').value.trim(); if (v) location.search = `?r=${encodeURIComponent(v)}`; } }, '進入'),
+  ));
+} else {
+  main();
+}
+
+async function main() {
+  const store = await createStore(room);
+  if (store.mode === 'local') $('#banner').replaceChildren(el('div', { class: 'banner' }, '本機模式：只在這台電腦的瀏覽器分頁之間同步（試流程用）'));
+
+  const SEAT_KEY = `classpoll:seat:${room}`;
+  let seat = localStorage.getItem(SEAT_KEY);
+  let unsubAns = null, myAns = null, state = null, lastKey = ''; // 要在下面兩個 return 之前宣告
+  if (!seat) return pickSeat();
+  return showQuestion();
+
+  // ---- 選座號 ----
+  function pickSeat() {
+    const grid = el('div', { class: 'seat-grid' });
+    for (let i = 1; i <= N; i++) {
+      grid.append(el('button', { onclick: async () => {
+        seat = String(i);
+        localStorage.setItem(SEAT_KEY, seat);
+        await store.set(`students/${seat}`, { t: Date.now() });
+        showQuestion();
+      } }, i));
+    }
+    app.replaceChildren(el('div', { class: 'card' },
+      el('h1', {}, '你的座號是幾號？'),
+      el('p', { class: 'muted small' }, `教室 ${room}`),
+      grid,
+    ));
+  }
+
+  // ---- 看題、作答 ----
+  function showQuestion() {
+    store.set(`students/${seat}`, { t: Date.now() });
+    store.on('state', (s) => { state = s; render(); });
+  }
+  function render() {
+    const head = el('div', { class: 'row', style: 'margin-bottom:10px' },
+      el('div', { class: 'grow' }, el('b', { style: 'font-size:20px' }, `座號 ${seat}`), el('span', { class: 'muted small' }, `　教室 ${room}`)),
+      el('button', { class: 'small', onclick: () => { localStorage.removeItem(SEAT_KEY); location.reload(); } }, '換座號'),
+    );
+    const q = state && state.qid ? findQuestion(state.set, state.qid) : null;
+    if (!q) {
+      app.replaceChildren(head, el('div', { class: 'card' }, el('div', { class: 'wait' }, '等老師出題…')));
+      if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
+      return;
+    }
+    // 題目換了才重新訂閱自己的答案
+    const key = `answers/${state.session}/${q.id}/${seat}`;
+    if (key !== lastKey) {
+      if (unsubAns) unsubAns();
+      lastKey = key; myAns = null;
+      unsubAns = store.on(key, (a) => { myAns = a; draw(); });
+      return; // 訂閱時會立刻回呼一次，由 draw 畫
+    }
+    draw();
+
+    function draw() {
+      const open = !!state.open;
+      const card = el('div', { class: 'card' },
+        q.tag ? el('div', { class: 'q-tag' }, q.tag) : null,
+        el('div', { class: 'q-text' }, q.text),
+      );
+      if (q.type === 'choice') {
+        q.options.forEach((opt, i) => {
+          const sel = myAns && myAns.i === i;
+          card.append(el('button', {
+            class: 'opt' + (sel ? ' sel' : ''), disabled: open ? null : 'disabled',
+            onclick: () => store.set(key, { v: opt, i, t: Date.now() }),
+          }, el('span', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]), el('span', {}, opt)));
+        });
+        card.append(statusLine(open, !!myAns, '請選一個，點了就送出'));
+      } else {
+        const ta = el('textarea', { placeholder: '打字，然後按送出', maxlength: '120' });
+        if (myAns && myAns.v) ta.value = myAns.v.startsWith(q.prefix) ? myAns.v.slice(q.prefix.length) : myAns.v;
+        if (!open) ta.disabled = true;
+        card.append(
+          el('div', { class: 'prefix' }, q.prefix + '……'),
+          ta,
+          el('div', { style: 'height:10px' }),
+          el('button', { class: 'primary big', style: 'width:100%', disabled: open ? null : 'disabled', onclick: () => {
+            const t = ta.value.trim();
+            if (!t) return;
+            store.set(key, { v: (q.prefix + t).slice(0, 200), t: Date.now() });
+          } }, myAns ? '再送一次' : '送出'),
+          statusLine(open, !!myAns, '打一句，按送出'),
+        );
+      }
+      app.replaceChildren(head, card);
+    }
+  }
+  function statusLine(open, answered, hint) {
+    if (!open) return el('div', { class: 'status muted' }, answered ? '已送出 ✓　作答已結束' : '作答已結束');
+    return answered ? el('div', { class: 'status ok' }, '已送出 ✓　還可以改') : el('div', { class: 'status muted' }, hint);
+  }
+}
+</script>
+</body>
+</html>

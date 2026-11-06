@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>老師控制台</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="teacher">
+<div id="banner"></div>
+<div id="app"><div class="wait">載入中…</div></div>
+<script type="module">
+import { createStore, qs, el, $ } from './store.js';
+import { SETS } from './questions.js';
+
+const app = $('#app');
+const room = qs('r');
+const setId = qs('set', 'L2');
+const N = Math.max(1, Math.min(60, +qs('n', 30) || 30));
+const SET = SETS[setId];
+
+if (!room || !SET) {
+  app.replaceChildren(el('div', { class: 'card' },
+    el('h1', {}, '老師控制台'),
+    el('p', {}, '網址要帶教室代碼和題組，例如：'),
+    el('code', {}, 'teacher.html?r=418&set=L2&n=21'),
+    el('p', { class: 'muted small' }, 'r＝教室代碼（學生掃碼後進同一間）、set＝題組（L1 第 1 節實測、L2 第 2 節）、n＝座號到幾號'),
+  ));
+} else {
+  main();
+}
+
+async function main() {
+  const store = await createStore(room);
+  if (store.mode === 'local') $('#banner').replaceChildren(el('div', { class: 'banner' }, '本機模式：只在這台電腦的瀏覽器分頁之間同步（試流程用）。要讓平板連進來，見 README 的上線步驟。'));
+
+  // ---- PIN ----
+  const PIN_KEY = `classpoll:pin:${room}`;
+  let pin = sessionStorage.getItem(PIN_KEY);
+  if (!pin) {
+    await new Promise((resolve) => {
+      app.replaceChildren(el('div', { class: 'card' },
+        el('h1', {}, `老師控制台 · 教室 ${room}`),
+        el('p', {}, '設定或輸入老師密碼（4 個字以上；第一次用會記住）：'),
+        el('input', { id: 'pin', type: 'password', placeholder: '老師密碼' }),
+        el('div', { style: 'height:10px' }),
+        el('button', { class: 'primary big', onclick: () => { const v = $('#pin').value.trim(); if (v.length >= 4) { pin = v; sessionStorage.setItem(PIN_KEY, v); resolve(); } } }, '進入'),
+      ));
+    });
+  }
+  // Firebase 模式：第一次用的人把密碼寫進去（規則只允許寫一次）；之後寫失敗就當作已存在
+  if (store.mode === 'firebase') { try { await store.set('config/pin', pin); } catch {} }
+
+  // ---- 狀態 ----
+  let state = await store.once('state');
+  if (!state || !state.session) {
+    state = { set: setId, qid: null, open: false, show: false, session: String(Date.now()), n: N, at: Date.now() };
+    await push(state);
+  } else if (state.set !== setId || state.n !== N) {
+    await push({ ...state, set: setId, n: N });
+  }
+  async function push(next) {
+    next = { ...next, at: Date.now() };
+    try { await store.update('', { token: pin, state: next }); }
+    catch (e) { alert('寫入失敗：老師密碼可能不對，或資料庫規則沒設好。\n' + e.message); throw e; }
+  }
+
+  // ---- 網址與 QR（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
+  const base = location.href.replace(/[^/]*$/, '');
+  const studentUrl = `${base}index.html?r=${encodeURIComponent(room)}&n=${N}`;
+  const screenUrl = `${base}screen.html?r=${encodeURIComponent(room)}`;
+
+  let answers = {};
+  let students = {};
+  let unsubAns = null;
+  store.on('students', (s) => { students = s || {}; draw(); });
+  store.on('state', (s) => {
+    if (!s) return;
+    const sessionChanged = !state || s.session !== state.session;
+    state = s;
+    if (sessionChanged || !unsubAns) {
+      if (unsubAns) unsubAns();
+      unsubAns = store.on(`answers/${state.session}`, (a) => { answers = a || {}; draw(); });
+    }
+    draw();
+  });
+
+  function draw() {
+    const q = state.qid ? SET.questions.find((x) => x.id === state.qid) : null;
+    const cur = q ? (answers[q.id] || {}) : {};
+    const answered = Object.keys(cur).length;
+    const joined = Object.keys(students).length;
+
+    // 卡 1：連線資訊
+    const info = el('div', { class: 'card' },
+      el('div', { class: 'row' },
+        el('div', { class: 'grow' },
+          el('h1', {}, `老師控制台 · 教室 ${room}`),
+          el('div', { class: 'muted' }, SET.title, `　座號 1～${N}`),
+          el('div', { style: 'margin-top:8px' }, '學生頁網址：', el('code', { style: 'user-select:all;word-break:break-all' }, studentUrl)),
+          el('div', { style: 'margin-top:6px' }, el('a', { href: screenUrl, target: '_blank' }, '開投影頁（另開分頁，拖到投影機那個螢幕）')),
+          el('div', { style: 'margin-top:10px' }, el('span', { class: 'kpi' }, joined), el('span', { class: 'muted' }, ' 人已加入')),
+        ),
+        el('div', { id: 'qr' }),
+      ),
+    );
+
+    // 卡 2：現在這題
+    const chips = el('div', { class: 'chips' });
+    for (let i = 1; i <= N; i++) chips.append(el('span', { class: 'chip' + (cur[String(i)] ? ' done' : '') }, i));
+    const now = el('div', { class: 'card' },
+      el('div', { class: 'row' },
+        el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q ? (q.tag || '') : ''), el('div', { class: 'q-text' }, q ? q.text : '（還沒出題）')),
+        q ? el('div', { class: 'kpi' }, `${answered}`, el('span', { class: 'muted', style: 'font-size:18px' }, ` / ${joined} 已作答`)) : null,
+      ),
+      q ? el('div', { class: 'row', style: 'margin:10px 0' },
+        el('button', { class: 'big ' + (state.open ? 'danger' : 'primary'), onclick: () => push({ ...state, open: !state.open }) }, state.open ? '關閉作答' : '開放作答'),
+        q.type === 'choice' ? el('button', { class: 'big', onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : el('span', { class: 'muted small' }, '開放題：句子會即時出現在投影幕'),
+        el('button', { onclick: () => push({ ...state, qid: null, open: false, show: false }) }, '收題（回到等待畫面）'),
+        el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '未開放'),
+        q.type === 'choice' ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數') : null,
+      ) : null,
+      q ? chips : null,
+    );
+
+    // 卡 3：題目列表
+    const tbl = el('table', { class: 'qlist' }, el('tr', {}, el('th', {}, '#'), el('th', {}, '段落'), el('th', {}, '題目'), el('th', {}, '已答'), el('th', {}, '')));
+    SET.questions.forEach((x, i) => {
+      const n = Object.keys(answers[x.id] || {}).length;
+      tbl.append(el('tr', { class: q && q.id === x.id ? 'cur' : '' },
+        el('td', {}, i + 1), el('td', { class: 'muted small' }, x.tag || ''), el('td', {}, x.text, x.type === 'text' ? el('span', { class: 'muted small' }, '（開放題）') : null),
+        el('td', {}, n || ''),
+        el('td', {}, el('button', { class: q && q.id === x.id ? '' : 'primary', onclick: () => push({ ...state, qid: x.id, open: true, show: x.type === 'text' }) }, q && q.id === x.id ? '出題中' : '出這題')),
+      ));
+    });
+    const list = el('div', { class: 'card' }, el('h1', {}, '題目'), el('p', { class: 'muted small' }, '按「出這題」＝立刻出題並開放作答。選擇題預設只顯示人數，討論時再按「顯示結果」。'), tbl);
+
+    // 卡 4：工具
+    const tools = el('div', { class: 'card' },
+      el('h1', {}, '工具'),
+      el('div', { class: 'row' },
+        el('button', { onclick: exportCsv }, '匯出這回合的答案（CSV）'),
+        el('button', { class: 'danger', onclick: () => { if (confirm('開新回合會把投影和計數歸零（舊答案還在資料庫裡，匯出時可選）。確定？')) push({ ...state, qid: null, open: false, show: false, session: String(Date.now()) }); } }, '新回合（試教完、正式上課前按）'),
+        el('span', { class: 'muted small' }, `回合 ${state.session}`),
+      ),
+    );
+
+    app.replaceChildren(info, now, list, tools);
+    if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 160, height: 160 });
+  }
+
+  function exportCsv() {
+    const rows = [['回合', '題號', '段落', '題目', '座號', '答案', '時間']];
+    for (const x of SET.questions) {
+      const a = answers[x.id] || {};
+      for (const seat of Object.keys(a).sort((p, q) => +p - +q)) {
+        rows.push([state.session, x.id, x.tag || '', x.text, seat, a[seat].v, new Date(a[seat].t).toLocaleString('zh-TW')]);
+      }
+    }
+    const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `classpoll_${room}_${setId}_${state.session}.csv` });
+    document.body.append(a); a.click(); a.remove();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投影</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="screen">
+<div id="app"><div class="wait">載入中…</div></div>
+<script type="module">
+import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS } from './store.js';
+import { SETS } from './questions.js';
+
+const app = $('#app');
+const room = qs('r');
+if (!room) {
+  app.replaceChildren(el('div', { class: 'wait' }, '網址要帶教室代碼：screen.html?r=418'));
+} else {
+  main();
+}
+
+async function main() {
+  const store = await createStore(room);
+  let state = null, answers = {}, students = {}, unsubAns = null, lastSession = null;
+  const base = location.href.replace(/[^/]*$/, '');
+
+  store.on('students', (s) => { students = s || {}; draw(); });
+  store.on('state', (s) => {
+    state = s;
+    const session = s && s.session;
+    if (session && session !== lastSession) {
+      lastSession = session;
+      if (unsubAns) unsubAns();
+      unsubAns = store.on(`answers/${session}`, (a) => { answers = a || {}; draw(); });
+    }
+    draw();
+  });
+
+  function draw() {
+    const SET = state && SETS[state.set];
+    const q = SET && state.qid ? SET.questions.find((x) => x.id === state.qid) : null;
+    const joined = Object.keys(students).length;
+
+    // 等待畫面：放大 QR 讓大家掃
+    if (!q) {
+      const n = state && state.n ? state.n : 30;
+      const url = `${base}index.html?r=${encodeURIComponent(room)}&n=${n}`;
+      app.replaceChildren(
+        el('div', { class: 'top' }, el('h1', { style: 'font-size:34px' }, `教室 ${room}`), el('div', { class: 'counter' }, el('b', {}, joined), ' 人已加入')),
+        el('div', { style: 'display:flex;gap:48px;align-items:center;margin-top:40px' },
+          el('div', { id: 'qr' }),
+          el('div', {},
+            el('div', { style: 'font-size:40px;font-weight:700;color:var(--navy)' }, '① 掃這個 QR code'),
+            el('div', { style: 'font-size:40px;font-weight:700;color:var(--navy);margin-top:16px' }, '② 按自己的座號'),
+            el('div', { style: 'font-size:40px;font-weight:700;color:var(--navy);margin-top:16px' }, '③ 等老師出題'),
+            el('div', { class: 'hint', style: 'margin-top:28px' }, '掃不了就打網址：', el('code', { style: 'font-size:22px;word-break:break-all' }, url)),
+          ),
+        ),
+        store.mode === 'local' ? el('div', { class: 'hint' }, '（本機模式）') : null,
+      );
+      if (window.QRCode) new QRCode($('#qr'), { text: url, width: 320, height: 320 });
+      return;
+    }
+
+    const cur = answers[q.id] || {};
+    const answered = Object.keys(cur).length;
+    const top = el('div', { class: 'top' },
+      el('div', {}, el('div', { class: 'q-tag', style: 'font-size:22px' }, q.tag || ''), el('div', { class: 'q-text' }, q.text)),
+      el('div', { class: 'counter' }, el('b', {}, answered), ` / ${joined} 已作答`, state.open ? '' : '　（已結束）'),
+    );
+
+    if (q.type === 'text') {
+      const items = Object.entries(cur).sort((a, b) => a[1].t - b[1].t);
+      const cards = el('div', { class: 'cards' }, items.map(([, a]) => el('div', { class: 'cardt' }, a.v)));
+      app.replaceChildren(top, items.length ? cards : el('div', { class: 'wait' }, '等大家的句子……'));
+      return;
+    }
+
+    if (!state.show) {
+      app.replaceChildren(top, el('div', { class: 'wait' }, state.open ? '作答中……' : '作答結束'), el('div', { class: 'hint' }, '結果等老師公布'));
+      return;
+    }
+
+    if (q.compareWith) {
+      const prev = SET.questions.find((x) => x.id === q.compareWith);
+      const prevAns = answers[prev.id] || {};
+      app.replaceChildren(top, el('div', { class: 'compare' },
+        el('div', {}, el('h3', {}, `${prev.tag || '前'}　${Object.keys(prevAns).length} 人`), bars(prev, prevAns)),
+        el('div', {}, el('h3', {}, `${q.tag || '後'}　${answered} 人`), bars(q, cur)),
+      ));
+      return;
+    }
+    app.replaceChildren(top, bars(q, cur));
+  }
+
+  // 長條圖：每個選項一列，寬度＝該選項人數 ÷ 作答人數
+  function bars(q, ans) {
+    const counts = q.options.map(() => 0);
+    for (const a of Object.values(ans)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
+    const total = counts.reduce((s, c) => s + c, 0) || 1;
+    return el('div', { class: 'bars' }, q.options.map((opt, i) => {
+      const pct = Math.round(counts[i] / total * 100);
+      return el('div', { class: 'bar-row' },
+        el('div', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]),
+        el('div', { class: 'bar-track' },
+          el('div', { class: 'bar-fill', style: `width:${counts[i] ? Math.max(pct, 4) : 0}%;background:${OPTION_COLORS[i]};opacity:.45` }),
+          el('div', { class: 'bar-label' }, opt),
+        ),
+        el('div', { class: 'bar-num' }, counts[i], el('small', {}, `${counts[i] ? pct : 0}%`)),
+      );
+    }));
+  }
+}
+</script>
+</body>
+</html>
