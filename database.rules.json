@@ -1,0 +1,33 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        "config": {
+          ".read": false,
+          ".write": "!data.exists()",
+          "pin": { ".validate": "newData.isString() && newData.val().length >= 4" }
+        },
+        "token": { ".read": false, ".write": true },
+        "state": {
+          ".read": true,
+          ".write": "newData.parent().child('token').val() === root.child('rooms/' + $room + '/config/pin').val()"
+        },
+        "students": {
+          ".read": true,
+          "$seat": { ".write": true, ".validate": "newData.hasChild('t')" }
+        },
+        "answers": {
+          ".read": true,
+          "$session": {
+            "$qid": {
+              "$seat": {
+                ".write": "root.child('rooms/' + $room + '/state/open').val() === true && root.child('rooms/' + $room + '/state/qid').val() === $qid && root.child('rooms/' + $room + '/state/session').val() === $session",
+                ".validate": "newData.child('v').isString() && newData.child('v').val().length <= 200"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

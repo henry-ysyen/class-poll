@@ -63,7 +63,7 @@ python -m http.server 8787
 
 1. 開 https://console.firebase.google.com → 「新增專案」→ 名稱隨意（例如 `class-poll`）→ Google Analytics 關掉 → 建立。
 2. 左邊「建構」→「Realtime Database」→「建立資料庫」→ 位置選 **asia-southeast1（新加坡）** → 安全規則先選「測試模式」→ 啟用。
-3. 「規則」分頁，整段換成下面這份 → 發布：
+3. 「規則」分頁，整段換成下面這份（同一份也在本資料夾 `database.rules.json`，用記事本打開全選複製最省事）→ 發布：
 
 ```json
 {
