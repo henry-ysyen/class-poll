@@ -3,6 +3,16 @@
 > 2026-11-04 建、11-06 第二版（操作與呈現定稿）、同日第三版（照老婆的三欄表：按鈕順序、倒數計時、投影提示條、筆電兩欄）。給老婆 11/18 公開課「用感官讀世界」第 2 節用；第 1 節 11/12 可先拿一題實測。
 > 老師在手機上一題一題出、學生平板掃碼作答、投影幕即時統計。不用登入、不用名字，只按座號。
 
+## 正式網址（2026-11-09 上線）
+
+| 頁面 | 網址 |
+|:--|:--|
+| 學生（平板掃碼） | `https://henry-ysyen.github.io/class-poll/` |
+| 老師遙控器 | `https://henry-ysyen.github.io/class-poll/teacher.html?set=L2` |
+| 投影 | `https://henry-ysyen.github.io/class-poll/screen.html` |
+
+資料庫＝Firebase 專案 `class-poll-a84b0`（Henry 的 Google 帳號，主控台 https://console.firebase.google.com ）；程式＝GitHub 倉庫 `henry-ysyen/class-poll`（公開）。正式教室代碼 418 的老師密碼由第一個開老師頁的人設定、之後改不了（想重設：主控台 Realtime Database 裡把 `rooms/418/config` 刪掉）。教室 `test` 是 AI 測規則用的，密碼 1234，不要拿來上課。
+
 ## 三個頁面
 
 | 頁面 | 誰用 | 網址 | 做什麼 |
@@ -58,6 +68,8 @@ python -m http.server 8787
 本機模式的資料只在同一台電腦的瀏覽器分頁之間同步（靠 localStorage），別台裝置看不到。
 
 ## 上線（讓全班平板連得到）：三步
+
+> ✅ 11/09 做完了（第 1、2 步）。Henry 在主控台建專案、資料庫、貼規則、註冊網頁應用程式，把設定貼給 AI 寫進 `firebase-config.js`；AI 先用網址直接敲資料庫把規則 11 條都測過（測試教室 `test`）；`gh repo create` 被 Henry 自己的煞車擋下，由他在對話框親自打那一行；Pages 用 `gh api` 開。以下留著當紀錄與重做步驟。
 
 ### 1. Firebase 建一個專案（Henry 的 Google 帳號，約 10 分鐘）
 
