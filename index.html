@@ -22,8 +22,12 @@ async function main() {
   const store = await createStore(room);
   if (store.mode === 'local') $('#banner').replaceChildren(el('div', { class: 'banner' }, '本機模式：只在這台電腦的瀏覽器分頁之間同步（試流程用）'));
 
+  // 座號跟「回合編號」一起記在平板上：老師按新回合，平板一看到回合變了就放掉座號、回到選座號畫面
+  // （平板是全班共用的，座號黏在平板上會讓下一個拿到的人頂著別人的座號；11/10 老婆到校實測後 Henry 回報）
   const SEAT_KEY = `classpoll:seat:${room}`;
-  let seat = localStorage.getItem(SEAT_KEY);
+  let seat = null, seatSession = null;
+  try { const j = JSON.parse(localStorage.getItem(SEAT_KEY) || 'null'); if (j && j.seat) { seat = String(j.seat); seatSession = j.session || null; } } catch {}
+  const saveSeat = () => { if (seat) localStorage.setItem(SEAT_KEY, JSON.stringify({ seat, session: seatSession })); else localStorage.removeItem(SEAT_KEY); };
   let state = null, students = {}, lastSession = null;
   let unsubAns = null, myAns = null, lastKey = '', lastDraw = '', draft = '';
   let ui = {}; // 畫面上要「就地更新」的元件（不整個重畫，打字中才不會被打斷）
@@ -35,8 +39,19 @@ async function main() {
   store.on('students', (s) => { students = s || {}; if (!seat) render(); });
   store.on('state', (s) => {
     state = s;
-    // 老師開新回合 → 自動重新報到，老師頁的「已加入」才算得到這一回合的人（學生不用重掃）
-    if (seat && s && s.session !== lastSession) { lastSession = s.session; checkIn(); }
+    const S = s && s.session;
+    if (seat && S) {
+      if (seatSession && seatSession !== S) {
+        // 老師開了新回合 → 放掉座號，回到選座號（不用重掃，網頁還開著）
+        seat = null; seatSession = null; saveSeat(); lastDraw = '';
+        if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
+      } else if (seatSession !== S) {
+        seatSession = S; saveSeat(); checkIn(); // 選座號時還沒拿到回合編號 → 現在補記、報到
+      } else if (S !== lastSession) {
+        checkIn(); // 重新整理後第一次拿到狀態 → 報到一次
+      }
+    }
+    lastSession = S || null;
     render();
   });
 
@@ -48,7 +63,7 @@ async function main() {
       const st = students[String(i)];
       const taken = !!(st && session && st.s === session);
       grid.append(el('button', { class: taken ? 'taken' : '', onclick: () => {
-        seat = String(i); localStorage.setItem(SEAT_KEY, seat);
+        seat = String(i); seatSession = session || null; saveSeat();
         lastSession = session || null; checkIn(); lastDraw = ''; render();
       } }, i));
     }
@@ -63,7 +78,7 @@ async function main() {
   function head() {
     return el('div', { class: 'row head' },
       el('div', { class: 'grow' }, el('span', { class: 'seat-badge' }, seat), el('span', { class: 'muted small' }, ` 號　教室 ${room}`)),
-      el('button', { class: 'small', onclick: () => { localStorage.removeItem(SEAT_KEY); location.reload(); } }, '換座號'),
+      el('button', { class: 'small', onclick: () => { seat = null; seatSession = null; saveSeat(); location.reload(); } }, '換座號'),
     );
   }
   function showQuestion() {

@@ -202,7 +202,7 @@ async function main() {
       el('div', { class: 'row', style: 'margin-top:10px' },
         el('button', { onclick: exportCsv }, '匯出這回合的答案（CSV）'),
         el('button', { onclick: exportOld }, '匯出以前的回合…'),
-        el('button', { class: 'danger', onclick: () => { if (confirm('開新回合：投影與計數歸零（舊答案還在資料庫，匯出時還拿得到）；學生平板不用重掃。試教完、正式上課前按。確定？')) push(fresh()); } }, '新回合'),
+        el('button', { class: 'danger', onclick: () => { if (confirm('開新回合：投影與計數歸零（舊答案還在資料庫，匯出時還拿得到）；學生平板會回到「選座號」畫面（不用重掃）。試教完、正式上課前按。確定？')) push(fresh()); } }, '新回合'),
         el('button', { onclick: () => { localStorage.removeItem(PIN_KEY); location.reload(); } }, '換密碼'),
         el('span', { class: 'muted small' }, `回合 ${state.session}`),
       ));
