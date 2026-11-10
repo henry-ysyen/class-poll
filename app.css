@@ -57,6 +57,7 @@ code { font-family: Consolas, "Microsoft JhengHei", monospace; }
 /* 老師頁（手機優先，筆電也能用） */
 .teacher { max-width: 640px; margin: 0 auto; }
 .topbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.setpick { font: inherit; font-weight: 700; font-size: 17px; color: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: #fff; max-width: 100%; }
 .now .q-text { font-size: 22px; margin: 8px 0 6px; }
 .count { font-size: 18px; margin: 4px 0 6px; }
 .count b { font-size: 28px; }

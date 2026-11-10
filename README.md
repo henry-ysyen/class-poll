@@ -8,8 +8,11 @@
 | 頁面 | 網址 |
 |:--|:--|
 | 學生（平板掃碼） | `https://henry-ysyen.github.io/class-poll/` |
-| 老師遙控器 | `https://henry-ysyen.github.io/class-poll/teacher.html?set=L2` |
+| 老師遙控器（11/12 第 1 節） | `https://henry-ysyen.github.io/class-poll/teacher.html?set=L1` |
+| 老師遙控器（11/18 第 2 節） | `https://henry-ysyen.github.io/class-poll/teacher.html?set=L2` |
 | 投影 | `https://henry-ysyen.github.io/class-poll/screen.html` |
+
+老師頁最上面有「題組」下拉選單，開錯節直接選另一個就好，不用改網址；學生頁與投影頁會跟著老師選的那一套走。
 
 資料庫＝Firebase 專案 `class-poll-a84b0`（Henry 的 Google 帳號，主控台 https://console.firebase.google.com ）；程式＝GitHub 倉庫 `henry-ysyen/class-poll`（公開）。正式教室代碼 418 的老師密碼由第一個開老師頁的人設定、之後改不了（想重設：主控台 Realtime Database 裡把 `rooms/418/config` 刪掉）。教室 `test` 是 AI 測規則用的，密碼 1234，不要拿來上課。
 

@@ -114,8 +114,13 @@ async function main() {
     const joined = joinedList.length;
 
     // 標題列
+    // 題組下拉選單：換一節課不用改網址（選了就重新載入，投影與學生畫面會跟著換）
+    const setPick = el('select', { class: 'setpick', onchange: (e) => { const u = new URL(location.href); u.searchParams.set('set', e.target.value); location.href = u.toString(); } },
+      Object.entries(SETS).map(([id, s]) => el('option', { value: id, selected: id === setId ? 'selected' : null }, s.title)));
     const bar = el('div', { class: 'topbar' },
-      el('div', { class: 'grow' }, el('b', {}, SET.title), el('div', { class: 'muted small' }, `教室 ${room}　座號 1～${N}　`, el('span', { class: 'pill' }, `${joined} 人已加入`))),
+      el('div', { class: 'grow' },
+        el('div', { class: 'row', style: 'gap:6px' }, el('span', { class: 'muted small' }, '題組'), setPick),
+        el('div', { class: 'muted small' }, `教室 ${room}　座號 1～${N}　`, el('span', { class: 'pill' }, `${joined} 人已加入`))),
     );
 
     // 現在這題 ＋ 遙控按鈕
