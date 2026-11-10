@@ -96,3 +96,8 @@ export function fmtTime(sec) { return `${Math.floor(sec / 60)}:${String(sec % 60
 export const OPTION_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']; // 選項 A～D 的顏色（dataviz 規範驗證過）
 export const OPTION_INK = ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b'];
 export const LETTERS = ['A', 'B', 'C', 'D'];
+// 選項的小圓標：4 個以內用 A～D 四色；超過 4 個（例如 0～9＋摸不出來）統一深藍底，短選項（兩字內）直接把選項字當標籤
+export function optBadge(opt, i, n) {
+  if (n <= 4) return { label: LETTERS[i], bg: OPTION_COLORS[i], ink: OPTION_INK[i] };
+  return { label: String(opt).length <= 2 ? String(opt) : String.fromCharCode(65 + i), bg: '#1f3864', ink: '#ffffff' };
+}

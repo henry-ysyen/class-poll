@@ -12,7 +12,7 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats, timerLeft, fmtTime } from './store.js';
+import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime } from './store.js';
 import { SETS, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
@@ -248,12 +248,13 @@ async function main() {
     const counts = q.options.map(() => 0);
     for (const a of Object.values(cur)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
     const total = Math.max(1, counts.reduce((s, c) => s + c, 0));
+    const n = q.options.length;
     return el('div', { class: 'mini' },
       el('div', { class: 'muted small' }, '分布（只有你看得到；投影要按「顯示結果」才出長條圖）'),
-      q.options.map((opt, i) => el('div', { class: 'mini-row' },
-        el('span', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]),
-        el('div', { class: 'mini-track' }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${OPTION_COLORS[i]}` }), el('span', { class: 'mini-label' }, opt)),
-        el('b', {}, counts[i]))));
+      q.options.map((opt, i) => { const b = optBadge(opt, i, n); return el('div', { class: 'mini-row' },
+        el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label),
+        el('div', { class: 'mini-track' }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${b.bg}` }), el('span', { class: 'mini-label' }, b.label === String(opt) ? '' : opt)),
+        el('b', {}, counts[i])); }));
   }
   function sentences(q, cur) {
     const items = Object.entries(cur).sort((a, b) => a[1].t - b[1].t);

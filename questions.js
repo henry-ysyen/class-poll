@@ -6,6 +6,8 @@
 export const DEFAULT_ROOM = '418';
 export const DEFAULT_N = 21;
 
+const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '摸不出來'];
+
 export const SETS = {
   L1: {
     // 11/10 照老師 1110 版詳案改：引起動機兩題改用問卷問、閉眼聽刪掉、活動二改「摸點字卡」（每輪一題，2～3 輪）。
@@ -14,9 +16,10 @@ export const SETS = {
     questions: [
       { id: 'a1', tag: '引起動機 ①', type: 'text', text: '海倫的朋友從森林散步回來，說「沒有看見什麼特別的東西」。海倫為什麼驚訝？', prefix: '因為' },
       { id: 'a2', tag: '引起動機 ②', type: 'choice', text: '課文第三段，下面哪一樣「不是」海倫用身體看到的？', options: ['樹枝上的蓓蕾', '柔軟的草地', '清涼的流水', '花朵的香味'] },
-      { id: 'b1', tag: '點字卡 ①', type: 'choice', text: '你摸到的點字，是哪個數字？', options: ['2', '4', '7', '摸不出來'] },
-      { id: 'b2', tag: '點字卡 ②', type: 'choice', text: '這一張呢？你摸到的是哪個數字？', options: ['2', '4', '7', '摸不出來'] },
-      { id: 'b3', tag: '點字卡 ③', type: 'choice', text: '最後一張，你摸到的是哪個數字？', options: ['2', '4', '7', '摸不出來'] },
+      // 選項 0～9＋摸不出來（11/10 Henry 定，不只列 2／4／7）；超過 4 個選項時三個頁面會改用格子排法
+      { id: 'b1', tag: '點字卡 ①', type: 'choice', text: '你摸到的點字，是哪個數字？', options: DIGITS },
+      { id: 'b2', tag: '點字卡 ②', type: 'choice', text: '這一張呢？你摸到的是哪個數字？', options: DIGITS },
+      { id: 'b3', tag: '點字卡 ③', type: 'choice', text: '最後一張，你摸到的是哪個數字？', options: DIGITS },
     ],
   },
   L2: {

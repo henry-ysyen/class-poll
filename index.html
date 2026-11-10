@@ -11,7 +11,7 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS } from './store.js';
+import { createStore, qs, el, $, optBadge } from './store.js';
 import { findQuestion, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
@@ -102,11 +102,16 @@ async function main() {
       el('div', { class: 'q-text' }, q.text),
     );
     if (q.type === 'choice') {
-      ui.opts = q.options.map((opt, i) => el('button', {
-        class: 'opt', disabled: open ? null : 'disabled',
-        onclick: () => store.set(key, { v: opt, i, t: Date.now() }),
-      }, el('span', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]), el('span', {}, opt)));
-      card.append(...ui.opts);
+      // 4 個以內：一列一個，帶 A～D 色標；超過 4 個（0～9＋摸不出來）：格子排，短的一格、長的跨整列
+      const n = q.options.length, grid = n > 4;
+      ui.opts = q.options.map((opt, i) => {
+        const b = optBadge(opt, i, n);
+        return el('button', {
+          class: 'opt' + (grid ? (String(opt).length <= 2 ? ' cell' : ' cell wide') : ''), disabled: open ? null : 'disabled',
+          onclick: () => store.set(key, { v: opt, i, t: Date.now() }),
+        }, grid ? el('span', {}, opt) : [el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', {}, opt)]);
+      });
+      card.append(...(grid ? [el('div', { class: 'opt-grid' }, ui.opts)] : ui.opts));
       ui.status = el('div', { class: 'status muted' });
       card.append(ui.status);
     } else {

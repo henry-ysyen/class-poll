@@ -11,10 +11,12 @@
 <body class="screen">
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, OPTION_COLORS, OPTION_INK, LETTERS, joinedSeats, timerLeft, fmtTime } from './store.js';
+import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime } from './store.js';
 import { SETS, DEFAULT_ROOM } from './questions.js';
 
 const app = $('#app');
+// 換整個畫面；null 的要先濾掉（replaceChildren 收到 null 會印出「null」三個字）
+function show(...kids) { app.replaceChildren(...kids.filter((k) => k != null)); }
 const room = qs('r', DEFAULT_ROOM);
 main();
 
@@ -55,7 +57,7 @@ async function main() {
     const pct = joined ? Math.round(answered / joined * 100) : 0;
     timerEl = state.timer ? el('div', { class: 'timer' }) : null;
     const top = el('div', { class: 'top' },
-      el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q.tag || ''), el('div', { class: 'q-text' }, q.text)),
+      el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q.tag || ''), el('div', { class: 'q-text' + (q.text.length > 26 ? ' long' : '') }, q.text)),
       el('div', { class: 'counter' },
         timerEl,
         el('div', {}, el('b', {}, answered), ` / ${joined} 已作答`),
@@ -72,7 +74,7 @@ async function main() {
     if (q.type === 'text') {
       const items = Object.entries(cur).sort((a, b) => a[1].t - b[1].t);
       const spot = state.spot && cur[state.spot] ? cur[state.spot] : null;
-      app.replaceChildren(top,
+      show(top,
         spot ? el('div', { class: 'spotlight' }, spot.v) : null,
         items.length
           ? el('div', { class: 'cards' }, items.map(([seat, a]) => el('div', { class: 'cardt' + (state.spot === seat ? ' spot' : '') }, a.v)))
@@ -83,26 +85,26 @@ async function main() {
 
     // 選擇題：結果公布前，投影只放題目、選項和人數
     if (!state.show) {
-      app.replaceChildren(top, optionList(q), bar);
+      show(top, optionList(q), bar);
       return;
     }
     if (q.compareWith) {
       const prev = SET.questions.find((x) => x.id === q.compareWith);
       const prevAns = answers[prev.id] || {};
-      app.replaceChildren(top, el('div', { class: 'compare' },
+      show(top, el('div', { class: 'compare' },
         el('div', {}, el('h3', {}, `${prev.tag || '前'}　${Object.keys(prevAns).length} 人`), bars(prev, prevAns)),
         el('div', {}, el('h3', {}, `${q.tag || '後'}　${answered} 人`), bars(q, cur)),
       ));
       return;
     }
-    app.replaceChildren(top, bars(q, cur));
+    show(top, bars(q, cur));
   }
 
   function drawQr(joinedList, n, title) {
     const set = new Set(joinedList);
     const chips = el('div', { class: 'chips big' });
     for (let s = 1; s <= n; s++) chips.append(el('span', { class: 'chip' + (set.has(String(s)) ? ' done' : '') }, s));
-    app.replaceChildren(
+    show(
       el('div', { class: 'top' }, el('h1', { style: 'font-size:34px' }, title), el('div', { class: 'counter' }, el('b', {}, joinedList.length), ' 人已加入')),
       el('div', { class: 'qr-wrap' },
         el('div', { id: 'qr' }),
@@ -120,7 +122,7 @@ async function main() {
   }
 
   function drawCover(joined) {
-    app.replaceChildren(
+    show(
       el('div', { class: 'cover' }, el('div', { class: 'cover-text' }, '請把平板蓋上'), el('div', { class: 'cover-sub' }, '眼睛看老師')),
       el('div', { class: 'corner' }, el('div', { id: 'qr' }), el('div', { class: 'hint', style: 'margin-top:6px;font-size:18px' }, `${joined} 人已加入`)),
     );
@@ -136,22 +138,26 @@ async function main() {
   }
 
   function optionList(q) {
-    return el('div', { class: 'opt-list' }, q.options.map((opt, i) => el('div', { class: 'opt-big' },
-      el('span', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]), el('span', {}, opt))));
+    const n = q.options.length;
+    if (n > 4) return el('div', { class: 'opt-list many' }, q.options.map((opt) => el('div', { class: 'opt-big' }, opt))); // 多選項：小方塊排一排
+    return el('div', { class: 'opt-list' }, q.options.map((opt, i) => { const b = optBadge(opt, i, n); return el('div', { class: 'opt-big' },
+      el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', {}, opt)); }));
   }
 
-  // 長條圖：每個選項一列，寬度＝該選項人數 ÷ 作答人數
+  // 長條圖：每個選項一列，寬度＝該選項人數 ÷ 作答人數；超過 6 個選項改矮一點的列（11 列也放得進 1080p）
   function bars(q, ans) {
     const counts = q.options.map(() => 0);
     for (const a of Object.values(ans)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
     const total = counts.reduce((s, c) => s + c, 0) || 1;
-    return el('div', { class: 'bars' }, q.options.map((opt, i) => {
+    const n = q.options.length;
+    return el('div', { class: 'bars' + (n > 6 ? ' dense' : '') }, q.options.map((opt, i) => {
       const pct = Math.round(counts[i] / total * 100);
+      const b = optBadge(opt, i, n);
       return el('div', { class: 'bar-row' },
-        el('div', { class: 'letter', style: `background:${OPTION_COLORS[i]};color:${OPTION_INK[i]}` }, LETTERS[i]),
+        el('div', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label),
         el('div', { class: 'bar-track' },
-          el('div', { class: 'bar-fill', style: `width:${counts[i] ? Math.max(pct, 4) : 0}%;background:${OPTION_COLORS[i]};opacity:.45` }),
-          el('div', { class: 'bar-label' }, opt),
+          el('div', { class: 'bar-fill', style: `width:${counts[i] ? Math.max(pct, 4) : 0}%;background:${b.bg};opacity:.45` }),
+          el('div', { class: 'bar-label' }, b.label === String(opt) ? '' : opt),
         ),
         el('div', { class: 'bar-num' }, counts[i], el('small', {}, `${counts[i] ? pct : 0}%`)),
       );
