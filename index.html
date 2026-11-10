@@ -119,7 +119,8 @@ async function main() {
       input.value = draft || (myAns && myAns.v ? strip(q, myAns.v) : '');
       if (!open) input.disabled = true;
       input.addEventListener('input', () => { draft = input.value; });
-      const send = () => { const t = input.value.trim(); if (!t) return; store.set(key, { v: (q.prefix + t).slice(0, 200), t: Date.now() }); };
+      // 學生自己又打了句首（例如「因為」「我聽到」）就先拿掉，免得變成「因為因為…」
+      const send = () => { let t = input.value.trim(); if (q.prefix && t.startsWith(q.prefix)) t = t.slice(q.prefix.length).trim(); if (!t) return; store.set(key, { v: (q.prefix + t).slice(0, 200), t: Date.now() }); };
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
       ui.send = el('button', { class: 'primary big', style: 'width:100%', disabled: open ? null : 'disabled', onclick: send }, '送出');
       ui.status = el('div', { class: 'status muted' });

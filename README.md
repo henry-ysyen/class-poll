@@ -133,7 +133,7 @@ gh api -X POST repos/henry-ysyen/class-poll/pages -f build_type=legacy -f "sourc
 ## 改題目／改班級
 
 只改 `questions.js`：
-- `SETS` 裡加一個題組或改選項，不用碰其他檔。選擇題最多 4 個選項（顏色固定藍、橘、青、黃）；開放題 `prefix` 會自動接在學生打的字前面；`compareWith` 讓投影頁把這題和指定的題並排。
+- `SETS` 裡加一個題組或改選項，不用碰其他檔。選擇題 4 個以內的選項用 A～D 四色、一列一個；超過 4 個（例如 0～9＋摸不出來）會自動改成格子排、投影長條變矮，選項字兩字以內就直接當標籤；開放題 `prefix` 會自動接在學生打的字前面；`compareWith` 讓投影頁把這題和指定的題並排。
 - 換班級：改 `DEFAULT_ROOM`（教室代碼，換了舊答案就看不到）與 `DEFAULT_N`（座號到幾號）。
 
 ## 不用了
