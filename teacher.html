@@ -196,6 +196,7 @@ async function main() {
     const tools = section('tools', '工具：匯出、新回合、換密碼',
       el('div', { class: 'row', style: 'margin-top:10px' },
         el('button', { onclick: exportCsv }, '匯出這回合的答案（CSV）'),
+        el('button', { onclick: exportOld }, '匯出以前的回合…'),
         el('button', { class: 'danger', onclick: () => { if (confirm('開新回合：投影與計數歸零（舊答案還在資料庫，匯出時還拿得到）；學生平板不用重掃。試教完、正式上課前按。確定？')) push(fresh()); } }, '新回合'),
         el('button', { onclick: () => { localStorage.removeItem(PIN_KEY); location.reload(); } }, '換密碼'),
         el('span', { class: 'muted small' }, `回合 ${state.session}`),
@@ -257,17 +258,36 @@ async function main() {
         el('span', { class: 'seat-no' }, seat), el('span', {}, a.v))));
   }
 
-  function exportCsv() {
-    const rows = [['回合', '題號', '段落', '題目', '座號', '答案', '時間']];
-    for (const x of SET.questions) {
-      const a = answers[x.id] || {};
+  // 匯出：這回合（畫面上的）或以前的回合。題目從所有題組找（舊回合可能是別的題組，例如 11/12 的 L1、11/18 的 L2）。
+  // 用 function 宣告（不用 const），因為 draw() 在訂閱一掛上就會跑、會用到 exportCsv／exportOld。
+  function exportCsv() { downloadCsv(state.session, answers); }
+  async function exportOld() {
+    const all = (await store.once('answers')) || {};
+    const sessions = Object.keys(all).filter((s) => s !== state.session).sort((a, b) => +b - +a);
+    if (!sessions.length) { alert('資料庫裡沒有以前的回合。'); return; }
+    const list = sessions.map((s, i) => `${i + 1}. ${fmtSession(s)}　${Object.keys(all[s]).length} 題有答案`).join('\n');
+    const pick = prompt('要匯出哪一個回合？輸入編號：\n' + list, '1');
+    const s = sessions[(+pick) - 1];
+    if (s) downloadCsv(s, all[s]);
+  }
+  function fmtSession(s) { return isFinite(+s) ? new Date(+s).toLocaleString('zh-TW') : s; }
+  function findAny(qid) { for (const [sid, set] of Object.entries(SETS)) { const q = set.questions.find((x) => x.id === qid); if (q) return { sid, q }; } return { sid: '', q: null }; }
+  function downloadCsv(session, ans) {
+    const rows = [['回合', '回合時間', '題組', '題號', '段落', '題目', '座號', '答案', '時間']];
+    const order = Object.values(SETS).flatMap((set) => set.questions.map((x) => x.id)); // 題目照題組順序；題庫裡已沒有的排最後
+    const qids = Object.keys(ans || {}).sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib); });
+    let sid = '';
+    for (const qid of qids) {
+      const f = findAny(qid); sid = sid || f.sid;
+      const a = ans[qid] || {};
       for (const seat of Object.keys(a).sort((p, q) => +p - +q)) {
-        rows.push([state.session, x.id, x.tag || '', x.text, seat, a[seat].v, new Date(a[seat].t).toLocaleString('zh-TW')]);
+        rows.push([session, fmtSession(session), f.sid, qid, f.q ? f.q.tag || '' : '', f.q ? f.q.text : '（題庫裡已沒有這題）', seat, a[seat].v, new Date(a[seat].t).toLocaleString('zh-TW')]);
       }
     }
+    const fileSet = sid || setId;
     const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const a = el('a', { href: URL.createObjectURL(blob), download: `classpoll_${room}_${setId}_${state.session}.csv` });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `classpoll_${room}_${fileSet}_${session}.csv` });
     document.body.append(a); a.click(); a.remove();
   }
 }
