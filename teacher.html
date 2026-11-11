@@ -56,7 +56,8 @@ async function main() {
   // ---- 狀態 ----
   // qid＝現在出的題、open＝開放作答、show＝投影顯示結果、screen＝待機時投影放什麼（qr 掃碼／cover 平板蓋上）、
   // spot＝投影放大的那一句（座號）、last＝最後出過的題（收題後「下一題」接得下去）、timer＝倒數（{secs, end}）、session＝回合
-  function fresh() { return { set: setId, qid: null, open: false, show: false, screen: 'qr', spot: null, last: null, timer: null, session: String(Date.now()), n: N, at: Date.now() }; }
+  // screen 多一種 'intro'＝課文封面（題組有 cover 才有）：新回合一開始投影只放封面，老師按「開始互動式問卷」才到 'qr'
+  function fresh() { return { set: setId, qid: null, open: false, show: false, screen: SET.cover ? 'intro' : 'qr', spot: null, last: null, timer: null, session: String(Date.now()), n: N, at: Date.now() }; }
   let state = await store.once('state');
   if (!state || !state.session) {
     state = fresh();
@@ -85,6 +86,7 @@ async function main() {
   const prev = () => { const q = SET.questions[pos() - 1]; if (q) showQ(q); };
   const close = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'cover' });
   const showQr = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'qr' });
+  const showIntro = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'intro' });
   const startTimer = (secs) => push({ ...state, timer: { secs, end: Date.now() + secs * 1000 } });
   const stopTimer = () => push({ ...state, timer: null });
 
@@ -127,17 +129,28 @@ async function main() {
     // 現在這題 ＋ 遙控按鈕
     let now;
     ui = {};
-    if (!q) {
+    if (!q && state.screen === 'intro' && SET.cover) {
+      // 上課開始：投影只放課文封面，平板還沒拿出來；按下面那顆才進入掃碼（＝互動式問卷開始）
+      now = el('div', { class: 'card now' },
+        el('div', { class: 'q-tag' }, '上課開始'),
+        el('div', { class: 'q-text' }, `投影幕：課文封面（${SET.cover.title || ''}）`),
+        el('div', { class: 'muted small' }, '先用封面帶課文，平板還不用拿出來。要開始互動式問卷再按下面那顆，投影就換成 QR code 掃碼畫面。'),
+        el('div', { class: 'row btns' },
+          el('button', { class: 'primary big grow', onclick: showQr }, '▶ 開始互動式問卷（投影：QR CODE）'),
+        ),
+      );
+    } else if (!q) {
       const cover = state.screen === 'cover';
       now = el('div', { class: 'card now' },
         el('div', { class: 'q-tag' }, '待機中'),
-        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : SET.cover ? '投影幕：課文封面＋QR CODE（掃碼加入）' : '投影幕：QR CODE（掃碼加入）'),
+        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : '投影幕：QR CODE（掃碼加入）'),
         el('div', { class: 'row btns' },
           el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ ${pos() < 0 ? '出第 1 題' : '下一題'}：${nextQ.tag || nextQ.text}` : '題目出完了'),
         ),
         el('div', { class: 'row', style: 'margin-top:8px' },
           cover ? el('button', { class: 'small', onclick: showQr }, '投影：顯示 QR CODE') : el('button', { class: 'small', onclick: close }, '投影：平板蓋上'),
           pos() >= 0 ? el('button', { class: 'small', onclick: () => showQ(SET.questions[pos()]) }, `◀ 回到剛才那題`) : null,
+          SET.cover && pos() < 0 ? el('button', { class: 'small', onclick: showIntro }, '投影：回到課文封面') : null,
         ),
       );
     } else if (q.type === 'slide') {
