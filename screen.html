@@ -11,7 +11,7 @@
 <body class="screen">
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime } from './store.js';
+import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally } from './store.js';
 import { SETS, DEFAULT_ROOM } from './questions.js';
 import { brailleChart } from './braille.js';
 
@@ -69,7 +69,7 @@ async function main() {
     tick();
     // 最下面一條指示（老婆要的：放大、上色，作答結束也一樣）
     const bar = hintbar(state.open
-      ? (q.type === 'text' ? '在平板上打一句，按送出。' : '在平板上選一個，點了就送出。結果等老師公布。')
+      ? (q.type === 'text' ? '在平板上打一句，按送出。' : q.type === 'multi' ? '可以選好幾個，點了就送出，再點一次取消。結果等老師公布。' : '在平板上選一個，點了就送出。結果等老師公布。')
       : '作答結束，眼睛看老師。', state.open);
 
     // 開放題：句子即時出現；老師在手機上點的那句放大在最上面
@@ -160,12 +160,12 @@ async function main() {
   }
 
   // 長條圖：每個選項一列，寬度＝該選項人數 ÷ 作答人數；超過 6 個選項改矮一點的列（11 列也放得進 1080p）
+  // 複選題一人可選多項，所以各列加起來會超過 100%，下面補一行說明
   function bars(q, ans) {
-    const counts = q.options.map(() => 0);
-    for (const a of Object.values(ans)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
-    const total = counts.reduce((s, c) => s + c, 0) || 1;
+    const { counts, respondents } = tally(q, ans);
+    const total = respondents || 1;
     const n = q.options.length;
-    return el('div', { class: 'bars' + (n > 6 ? ' dense' : '') }, q.options.map((opt, i) => {
+    const list = el('div', { class: 'bars' + (n > 6 ? ' dense' : '') }, q.options.map((opt, i) => {
       const pct = Math.round(counts[i] / total * 100);
       const b = optBadge(opt, i, n);
       return el('div', { class: 'bar-row' },
@@ -177,6 +177,8 @@ async function main() {
         el('div', { class: 'bar-num' }, counts[i], el('small', {}, `${counts[i] ? pct : 0}%`)),
       );
     }));
+    if (q.type !== 'multi') return list;
+    return el('div', {}, list, el('div', { class: 'hint' }, `可複選：${respondents} 人作答，一人可以選好幾項，百分比＝選這一項的人 ÷ 作答人數`));
   }
 }
 </script>

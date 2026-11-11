@@ -117,15 +117,23 @@ async function main() {
       q.tag ? el('div', { class: 'q-tag' }, q.tag) : null,
       el('div', { class: 'q-text' }, q.text),
     );
-    if (q.type === 'choice') {
+    if (q.type === 'choice' || q.type === 'multi') {
       // 4 個以內：一列一個，帶 A～D 色標；超過 4 個（0～9＋摸不出來）：格子排，短的一格、長的跨整列
-      const n = q.options.length, grid = n > 4;
+      // 複選（multi）：點一個存一個、再點一次取消，全部取消就把答案拿掉；存 is＝選到的編號、v＝選項文字用「、」接起來（匯出 CSV 看得懂）
+      const n = q.options.length, grid = n > 4, multi = q.type === 'multi';
+      const pickMulti = (i) => {
+        const cur = new Set(myAns && Array.isArray(myAns.is) ? myAns.is : []);
+        if (cur.has(i)) cur.delete(i); else cur.add(i);
+        const is = [...cur].sort((a, b) => a - b);
+        if (!is.length) return store.remove(key);
+        store.set(key, { v: is.map((k) => q.options[k]).join('、'), is, t: Date.now() });
+      };
       ui.opts = q.options.map((opt, i) => {
         const b = optBadge(opt, i, n);
         return el('button', {
           class: 'opt' + (grid ? (String(opt).length <= 2 ? ' cell' : ' cell wide') : ''), disabled: open ? null : 'disabled',
-          onclick: () => store.set(key, { v: opt, i, t: Date.now() }),
-        }, grid ? el('span', {}, opt) : [el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', {}, opt)]);
+          onclick: () => (multi ? pickMulti(i) : store.set(key, { v: opt, i, t: Date.now() })),
+        }, grid ? el('span', {}, opt) : [el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', { class: 'grow' }, opt), multi ? el('span', { class: 'tick' }) : null]);
       });
       card.append(...(grid ? [el('div', { class: 'opt-grid' }, ui.opts)] : ui.opts));
       ui.status = el('div', { class: 'status muted' });
@@ -148,13 +156,18 @@ async function main() {
   function strip(q, v) { return q.prefix && v.startsWith(q.prefix) ? v.slice(q.prefix.length) : v; }
   function patch(q, open) {
     const answered = !!(myAns && myAns.v);
-    if (ui.opts) ui.opts.forEach((b, i) => b.classList.toggle('sel', !!(myAns && myAns.i === i)));
+    const picked = myAns && Array.isArray(myAns.is) ? myAns.is : [];
+    if (ui.opts) ui.opts.forEach((b, i) => {
+      const sel = q.type === 'multi' ? picked.includes(i) : !!(myAns && myAns.i === i);
+      b.classList.toggle('sel', sel);
+      const t = b.querySelector('.tick'); if (t) t.textContent = sel ? '✓' : '';
+    });
     if (ui.send) ui.send.textContent = answered ? '再送一次（改句子）' : '送出';
     if (!ui.status) return;
     ui.status.className = 'status ' + (answered ? 'ok' : 'muted');
     if (!open) ui.status.textContent = answered ? '已送出 ✓　作答已結束' : '作答已結束';
-    else if (answered) ui.status.textContent = q.type === 'choice' ? '已送出 ✓　還可以改' : `已送出 ✓　「${myAns.v}」`;
-    else ui.status.textContent = q.type === 'choice' ? '請選一個，點了就送出' : '打一句，按送出';
+    else if (answered) ui.status.textContent = q.type === 'choice' ? '已送出 ✓　還可以改' : q.type === 'multi' ? `已選 ${picked.length} 個 ✓　還可以再點，再點一次取消` : `已送出 ✓　「${myAns.v}」`;
+    else ui.status.textContent = q.type === 'choice' ? '請選一個，點了就送出' : q.type === 'multi' ? '可以選好幾個，點了就送出' : '打一句，按送出';
   }
 }
 </script>

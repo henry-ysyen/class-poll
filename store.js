@@ -87,6 +87,19 @@ export function el(tag, attrs = {}, ...children) {
 export function joinedSeats(students, session) {
   return Object.entries(students || {}).filter(([, v]) => v && session && v.s === session).map(([k]) => k).sort((a, b) => +a - +b);
 }
+// 選擇題的計數：單選存 a.i（一個編號）、複選存 a.is（編號陣列）；respondents＝作答人數，複選的百分比用它當分母（一人可選多項，長條加起來會超過 100%）
+export function tally(q, ans) {
+  const counts = q.options.map(() => 0);
+  let respondents = 0;
+  for (const a of Object.values(ans || {})) {
+    if (!a) continue;
+    const idx = Array.isArray(a.is) ? a.is : typeof a.i === 'number' ? [a.i] : [];
+    if (!idx.length) continue;
+    respondents++;
+    for (const i of idx) if (counts[i] !== undefined) counts[i]++;
+  }
+  return { counts, respondents };
+}
 // 倒數計時：老師按下去時寫 end（結束的時間點），各畫面用自己的時鐘算剩幾秒。手機與投影電腦都會自動對時，差一兩秒沒關係。
 export function timerLeft(timer) {
   if (!timer || !timer.end) return null;

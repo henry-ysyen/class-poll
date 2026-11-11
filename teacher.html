@@ -12,7 +12,7 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime } from './store.js';
+import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally } from './store.js';
 import { SETS, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
@@ -164,12 +164,13 @@ async function main() {
     } else {
       const pct = joined ? Math.round(answered / joined * 100) : 0;
       // 按鈕順序照老婆定的：出題 → 關閉作答 → 顯示結果 → 下一題；輪到哪一步，那顆就亮黃色
-      const step = state.open ? 'close' : (q.type === 'choice' && !state.show) ? 'show' : 'next';
+      const pick = q.type === 'choice' || q.type === 'multi'; // 單選與複選都走「顯示結果」出長條圖
+      const step = state.open ? 'close' : (pick && !state.show) ? 'show' : 'next';
       now = el('div', { class: 'card now' },
         el('div', { class: 'row', style: 'gap:6px' },
           el('div', { class: 'q-tag', style: 'margin-right:4px' }, `第 ${i + 1}／${SET.questions.length} 題　${q.tag || ''}`),
           el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '已關閉'),
-          q.type === 'choice'
+          pick
             ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數')
             : el('span', { class: 'pill on' }, '投影：句子即時出現'),
         ),
@@ -179,7 +180,7 @@ async function main() {
         timerRow(),
         el('div', { class: 'row btns' },
           el('button', { class: 'big grow' + (step === 'close' ? ' accent' : ''), onclick: () => push({ ...state, open: !state.open, timer: state.open ? null : state.timer }) }, state.open ? '關閉作答' : '開放作答'),
-          q.type === 'choice' ? el('button', { class: 'big grow' + (step === 'show' ? ' accent' : ''), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
+          pick ? el('button', { class: 'big grow' + (step === 'show' ? ' accent' : ''), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
         ),
         el('div', { class: 'row btns' },
           el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ 下一題：${nextQ.tag || nextQ.text}` : '已是最後一題'),
@@ -189,7 +190,7 @@ async function main() {
           el('button', { class: 'small', onclick: close }, '收題（投影：平板蓋上）'),
         ),
         chips(cur, joinedList),
-        q.type === 'choice' ? miniBars(q, cur) : sentences(q, cur),
+        pick ? miniBars(q, cur) : sentences(q, cur),
       );
     }
 
@@ -201,7 +202,7 @@ async function main() {
       tbl.append(el('div', { class: 'qrow' + (isCur ? ' cur' : '') },
         el('div', { class: 'qn' }, k + 1),
         el('div', { class: 'grow' },
-          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'slide' ? '（投影頁，不作答）' : '') + (n ? `　${n} 人答過` : '')),
+          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'multi' ? '（複選）' : x.type === 'slide' ? '（投影頁，不作答）' : '') + (n ? `　${n} 人答過` : '')),
           el('div', {}, x.text)),
         el('button', { class: isCur ? 'small' : 'small primary', disabled: isCur ? 'disabled' : null, onclick: () => showQ(x) }, isCur ? '出題中' : '出這題'),
       ));
@@ -267,12 +268,11 @@ async function main() {
     return el('div', { style: 'margin-top:12px' }, c, el('div', { class: 'muted small', style: 'margin-top:4px' }, '綠＝答了　白＝加入了還沒答　灰＝沒加入'));
   }
   function miniBars(q, cur) {
-    const counts = q.options.map(() => 0);
-    for (const a of Object.values(cur)) if (typeof a.i === 'number' && counts[a.i] !== undefined) counts[a.i]++;
-    const total = Math.max(1, counts.reduce((s, c) => s + c, 0));
+    const { counts, respondents } = tally(q, cur); // 複選：一人可選多項，長條寬度＝選這項的人 ÷ 作答人數
+    const total = Math.max(1, respondents);
     const n = q.options.length;
     return el('div', { class: 'mini' },
-      el('div', { class: 'muted small' }, '分布（只有你看得到；投影要按「顯示結果」才出長條圖）'),
+      el('div', { class: 'muted small' }, (q.type === 'multi' ? `分布（複選，${respondents} 人作答、一人可選多項；` : '分布（') + '只有你看得到；投影要按「顯示結果」才出長條圖）'),
       q.options.map((opt, i) => { const b = optBadge(opt, i, n); return el('div', { class: 'mini-row' },
         el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label),
         el('div', { class: 'mini-track' }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${b.bg}` }), el('span', { class: 'mini-label' }, b.label === String(opt) ? '' : opt)),
