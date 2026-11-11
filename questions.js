@@ -1,5 +1,6 @@
 // 題庫：一個「題組」對應一節課。老師頁用網址 ?set=L2 選題組。
-// type: 'choice'＝單選（最多 4 個選項）、'text'＝開放題（學生打一句，prefix 會自動接在前面）
+// type: 'choice'＝單選（最多 4 個選項）、'text'＝開放題（學生打一句，prefix 會自動接在前面）、
+//       'slide'＝投影頁（不作答；目前只有點字 0～9 對照表，highlight＝老師按「顯示答案」時要加黃框的數字，student＝平板上那行字）
 // compareWith: 投影頁把這題和指定的題並排（前測／後測對照）
 
 // 班級設定：網址沒帶 r／n 時就用這兩個。學生只要開 index.html（不用任何參數）就進得來，QR code 比較短。
@@ -20,6 +21,8 @@ export const SETS = {
       { id: 'b1', tag: '點字卡 ①', type: 'choice', text: '你摸到的點字，是哪個數字？', options: DIGITS },
       { id: 'b2', tag: '點字卡 ②', type: 'choice', text: '這一張呢？你摸到的是哪個數字？', options: DIGITS },
       { id: 'b3', tag: '點字卡 ③', type: 'choice', text: '最後一張，你摸到的是哪個數字？', options: DIGITS },
+      // 揭曉（11/11 Henry 要的）：三輪摸完，投影放整張 0～9 對照表讓學生自己找；老師按「顯示答案」才在今天摸的 2／4／7 加黃框。省掉切視窗開 PDF。
+      { id: 'b4', tag: '揭曉', type: 'slide', text: '點字的數字 0～9', highlight: ['2', '4', '7'], student: '找找看，你剛剛摸到的是哪個數字？' },
     ],
   },
   L2: {

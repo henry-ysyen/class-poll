@@ -147,3 +147,15 @@ body.screen { padding: 24px 40px 130px; min-height: 100vh; }
 .corner { position: fixed; right: 32px; bottom: 24px; text-align: center; }
 .screen .wait { font-size: 36px; padding: 80px 0; }
 .screen .hint { font-size: 22px; color: var(--muted); margin-top: 24px; }
+
+/* 揭曉頁：點字 0～9 對照表，兩列五格；點距跟著投影幕大小縮放（1080p 約 65px，720p 約 44px），兩列加標題放得進提示條上方 */
+.screen .legend { font-size: 22px; color: var(--ink2); text-align: right; line-height: 1.5; white-space: nowrap; }
+.bchart { --pitch: min(3.7vw, 6.5vh); --dot: calc(var(--pitch) * .66); display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5vh 1.5vw; margin-top: 1vh; }
+.bdigit { display: flex; flex-direction: column; align-items: center; gap: 1vh; padding: 1vh 1vw; border-radius: 18px; border: 5px solid transparent; }
+.bdigit.hl { background: #fff6d6; border-color: var(--warn); animation: pop .35s ease; }
+.bcell { display: grid; grid-template-columns: repeat(2, var(--pitch)); grid-auto-rows: var(--pitch); }
+.bcell .dot { width: var(--dot); height: var(--dot); margin: auto; border-radius: 50%; border: 3px solid #cfcfcf; background: #fff; }
+.bcell .dot.on { background: #111; border-color: #111; }
+.bnum { font-size: min(3.2vw, 5.5vh); font-weight: 700; line-height: 1; }
+.bdigit.hl .bnum { color: var(--navy); }
+.hintbar.answer { background: #e2f0d9; color: #2e6b1f; border-top-color: var(--good); }

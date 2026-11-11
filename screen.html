@@ -13,6 +13,7 @@
 <script type="module">
 import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime } from './store.js';
 import { SETS, DEFAULT_ROOM } from './questions.js';
+import { brailleChart } from './braille.js';
 
 const app = $('#app');
 // 換整個畫面；null 的要先濾掉（replaceChildren 收到 null 會印出「null」三個字）
@@ -51,6 +52,7 @@ async function main() {
       if (state && state.screen === 'cover') return drawCover(joined);
       return drawQr(joinedList, (state && state.n) || 30, SET ? SET.title : `教室 ${room}`);
     }
+    if (q.type === 'slide') return drawSlide(q);
 
     const cur = answers[q.id] || {};
     const answered = Object.keys(cur).length;
@@ -129,7 +131,20 @@ async function main() {
     if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 120, height: 120 });
   }
 
-  function hintbar(text, open) { return el('div', { class: 'hintbar' + (open ? '' : ' closed') }, text); }
+  // 揭曉頁（點字對照表）：先放整張讓學生自己找；老師按「顯示答案」才在今天摸的那幾格加黃框，提示條變綠色
+  function drawSlide(q) {
+    const on = !!state.show;
+    const hl = q.highlight || [];
+    show(
+      el('div', { class: 'top' },
+        el('div', { class: 'grow' }, el('div', { class: 'q-tag' }, q.tag || ''), el('div', { class: 'q-text' }, q.text)),
+        el('div', { class: 'legend' }, '一格 6 個點位：左欄 1、2、3，右欄 4、5、6', el('br'), '黑點＝凸起　空圈＝沒有')),
+      brailleChart({ highlight: hl, show: on }),
+      hintbar(on ? `黃框＝今天摸的三張卡：${hl.join('、')}` : '找找看，你剛剛摸到的是哪一個數字？', true, on ? ' answer' : ''),
+    );
+  }
+
+  function hintbar(text, open, extra = '') { return el('div', { class: 'hintbar' + (open ? '' : ' closed') + extra }, text); }
   function tick() {
     if (!timerEl || !state || !state.timer) return;
     const left = timerLeft(state.timer);

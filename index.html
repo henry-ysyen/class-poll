@@ -83,16 +83,17 @@ async function main() {
   }
   function showQuestion() {
     const q = state && state.qid ? findQuestion(state.set, state.qid) : null;
-    if (!q) {
+    const slide = !!(q && q.type === 'slide'); // 投影頁（例如點字對照表揭曉）：平板不作答，只叫學生看投影幕
+    if (!q || slide) {
       if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
       const cover = !!(state && state.screen === 'cover');
-      const key = `idle|${cover}`;
+      const key = `idle|${cover}|${slide ? q.id : ''}`;
       if (key === lastDraw) return;
       lastDraw = key;
       app.replaceChildren(head(), el('div', { class: 'card idle' },
         el('div', { class: 'big-seat' }, seat),
-        el('div', { class: 'idle-text' }, cover ? '請把平板蓋上' : '已加入 ✓'),
-        el('div', { class: 'muted', style: 'font-size:22px' }, cover ? '眼睛看老師' : '請把平板蓋上，眼睛看老師'),
+        el('div', { class: 'idle-text' }, slide ? '眼睛看投影幕' : cover ? '請把平板蓋上' : '已加入 ✓'),
+        el('div', { class: 'muted', style: 'font-size:22px' }, slide ? (q.student || '') : cover ? '眼睛看老師' : '請把平板蓋上，眼睛看老師'),
       ));
       return;
     }

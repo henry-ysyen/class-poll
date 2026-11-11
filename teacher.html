@@ -79,7 +79,8 @@ async function main() {
   // ---- 操作（要在訂閱之前宣告，訂閱一掛上就會畫畫面）----
   const indexOf = (id) => SET.questions.findIndex((x) => x.id === id);
   const pos = () => (state.qid ? indexOf(state.qid) : state.last ? indexOf(state.last) : -1);
-  const showQ = (q) => push({ ...state, qid: q.id, last: q.id, open: true, show: q.type === 'text', spot: null, timer: null });
+  // 投影頁（slide）不作答：open 關著（學生寫不進來），show 先關著＝整張表沒黃框，老師再按「顯示答案」
+  const showQ = (q) => push({ ...state, qid: q.id, last: q.id, open: q.type !== 'slide', show: q.type === 'text', spot: null, timer: null });
   const next = () => { const q = SET.questions[pos() + 1]; if (q) showQ(q); };
   const prev = () => { const q = SET.questions[pos() - 1]; if (q) showQ(q); };
   const close = () => push({ ...state, qid: null, open: false, show: false, spot: null, timer: null, screen: 'cover' });
@@ -139,6 +140,27 @@ async function main() {
           pos() >= 0 ? el('button', { class: 'small', onclick: () => showQ(SET.questions[pos()]) }, `◀ 回到剛才那題`) : null,
         ),
       );
+    } else if (q.type === 'slide') {
+      // 投影頁（點字對照表揭曉）：沒有作答，只有一顆「顯示答案」切黃框
+      const hl = (q.highlight || []).join('、');
+      now = el('div', { class: 'card now' },
+        el('div', { class: 'row', style: 'gap:6px' },
+          el('div', { class: 'q-tag', style: 'margin-right:4px' }, `第 ${i + 1}／${SET.questions.length}　${q.tag || ''}`),
+          el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? `投影：黃框 ${hl}` : '投影：整張表（還沒框）'),
+        ),
+        el('div', { class: 'q-text' }, q.text),
+        el('div', { class: 'muted small' }, `投影幕在放點字 0～9 對照表，平板不用作答。先讓學生自己找剛剛摸到的是哪一個，再按下面那顆，今天摸的 ${hl} 會加黃框。`),
+        el('div', { class: 'row btns' },
+          el('button', { class: 'big grow' + (state.show ? '' : ' accent'), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏黃框' : `顯示答案（黃框 ${hl}）`),
+        ),
+        el('div', { class: 'row btns' },
+          el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ 下一題：${nextQ.tag || nextQ.text}` : '已是最後一題'),
+        ),
+        el('div', { class: 'row', style: 'margin-top:8px' },
+          el('button', { class: 'small', disabled: i > 0 ? null : 'disabled', onclick: prev }, '◀ 上一題'),
+          el('button', { class: 'small', onclick: close }, '收題（投影：平板蓋上）'),
+        ),
+      );
     } else {
       const pct = joined ? Math.round(answered / joined * 100) : 0;
       // 按鈕順序照老婆定的：出題 → 關閉作答 → 顯示結果 → 下一題；輪到哪一步，那顆就亮黃色
@@ -179,7 +201,7 @@ async function main() {
       tbl.append(el('div', { class: 'qrow' + (isCur ? ' cur' : '') },
         el('div', { class: 'qn' }, k + 1),
         el('div', { class: 'grow' },
-          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : '') + (n ? `　${n} 人答過` : '')),
+          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'slide' ? '（投影頁，不作答）' : '') + (n ? `　${n} 人答過` : '')),
           el('div', {}, x.text)),
         el('button', { class: isCur ? 'small' : 'small primary', disabled: isCur ? 'disabled' : null, onclick: () => showQ(x) }, isCur ? '出題中' : '出這題'),
       ));
