@@ -131,7 +131,7 @@ async function main() {
       const cover = state.screen === 'cover';
       now = el('div', { class: 'card now' },
         el('div', { class: 'q-tag' }, '待機中'),
-        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : '投影幕：QR CODE（掃碼加入）'),
+        el('div', { class: 'q-text' }, cover ? '投影幕：請把平板蓋上' : SET.cover ? '投影幕：課文封面＋QR CODE（掃碼加入）' : '投影幕：QR CODE（掃碼加入）'),
         el('div', { class: 'row btns' },
           el('button', { class: 'primary big grow', disabled: nextQ ? null : 'disabled', onclick: next }, nextQ ? `▶ ${pos() < 0 ? '出第 1 題' : '下一題'}：${nextQ.tag || nextQ.text}` : '題目出完了'),
         ),

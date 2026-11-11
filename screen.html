@@ -46,11 +46,12 @@ async function main() {
     const q = SET && state.qid ? SET.questions.find((x) => x.id === state.qid) : null;
     const joinedList = state ? joinedSeats(students, state.session) : [];
     const joined = joinedList.length;
+    document.body.classList.toggle('nobar', !q); // 待機畫面沒有底部提示條，不用留那 130px（720p 的封面畫面才放得下）
 
     // 待機：掃碼畫面 或 平板蓋上
     if (!q) {
       if (state && state.screen === 'cover') return drawCover(joined);
-      return drawQr(joinedList, (state && state.n) || 30, SET ? SET.title : `教室 ${room}`);
+      return drawQr(joinedList, (state && state.n) || 30, SET ? SET.title : `教室 ${room}`, SET && SET.cover);
     }
     if (q.type === 'slide') return drawSlide(q);
 
@@ -102,24 +103,30 @@ async function main() {
     show(top, bars(q, cur));
   }
 
-  function drawQr(joinedList, n, title) {
+  // 待機掃碼畫面。題組有 cover（課文封面）就左圖右 QR，老師不用多按任何東西；出第 1 題後整個畫面照舊
+  function drawQr(joinedList, n, title, cover) {
     const set = new Set(joinedList);
     const chips = el('div', { class: 'chips big' });
     for (let s = 1; s <= n; s++) chips.append(el('span', { class: 'chip' + (set.has(String(s)) ? ' done' : '') }, s));
-    show(
-      el('div', { class: 'top' }, el('h1', { style: 'font-size:34px' }, title), el('div', { class: 'counter' }, el('b', {}, joinedList.length), ' 人已加入')),
-      el('div', { class: 'qr-wrap' },
-        el('div', { id: 'qr' }),
-        el('div', {},
-          el('div', { class: 'step' }, '① 平板相機對準 QR code，點出現的網址'),
-          el('div', { class: 'step' }, '② 按自己的座號'),
-          el('div', { class: 'step' }, '③ 座號亮了，就把平板蓋上、眼睛看老師'),
-          el('div', { class: 'hint', style: 'margin-top:20px' }, '掃不了就打網址：', el('code', { style: 'font-size:22px;word-break:break-all' }, studentUrl)),
-        ),
+    const top = el('div', { class: 'top' }, el('h1', { style: 'font-size:34px' }, title), el('div', { class: 'counter' }, el('b', {}, joinedList.length), ' 人已加入'));
+    const qrBlock = el('div', { class: 'qr-wrap' },
+      el('div', { id: 'qr' }),
+      el('div', {},
+        el('div', { class: 'step' }, '① 平板相機對準 QR code，點出現的網址'),
+        el('div', { class: 'step' }, '② 按自己的座號'),
+        el('div', { class: 'step' }, '③ 座號亮了，就把平板蓋上、眼睛看老師'),
+        el('div', { class: 'hint', style: 'margin-top:20px' }, '掃不了就打網址：', el('code', { style: 'font-size:22px;word-break:break-all' }, studentUrl)),
       ),
-      el('div', { style: 'margin-top:32px' }, el('div', { class: 'hint', style: 'margin:0 0 10px' }, '座號亮起來＝成功加入'), chips),
-      store.mode === 'local' ? el('div', { class: 'hint' }, '（本機模式）') : null,
     );
+    const chipsBlock = el('div', { style: 'margin-top:32px' }, el('div', { class: 'hint', style: 'margin:0 0 10px' }, '座號亮起來＝成功加入'), chips);
+    const localNote = store.mode === 'local' ? el('div', { class: 'hint' }, '（本機模式）') : null;
+    if (cover) {
+      show(top, el('div', { class: 'stage' },
+        el('img', { class: 'cover-img', src: cover.image, alt: cover.title || '' }),
+        el('div', { class: 'grow' }, qrBlock, chipsBlock, localNote)));
+    } else {
+      show(top, qrBlock, chipsBlock, localNote);
+    }
     if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 320, height: 320 });
   }
 

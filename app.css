@@ -98,6 +98,7 @@ details.card summary { cursor: pointer; font-weight: 700; color: var(--navy); }
 
 /* 投影頁 */
 body.screen { padding: 24px 40px 130px; min-height: 100vh; }
+body.screen.nobar { padding-bottom: 24px; } /* 待機畫面（掃碼／蓋上）沒有底部提示條 */
 .screen .timer { font-size: 60px; line-height: 1.1; margin-bottom: 4px; }
 .screen .timer.over { animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: .2; } }
@@ -112,6 +113,18 @@ body.screen { padding: 24px 40px 130px; min-height: 100vh; }
 .screen .counter .progress { margin-top: 8px; height: 14px; }
 .screen .small-state { font-size: 20px; color: var(--muted); margin-top: 4px; }
 .qr-wrap { display: flex; gap: 48px; align-items: center; margin-top: 32px; }
+/* 待機掃碼畫面的課文封面（questions.js 題組的 cover）：左圖佔滿高度（扣掉標題列與下方留白，1080p 約 830px 高）、右邊 QR＋步驟＋座號燈 */
+.stage { display: flex; gap: 40px; align-items: flex-start; margin-top: 12px; }
+.cover-img { height: calc(100vh - 170px); max-width: 40vw; object-fit: contain; flex: none; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.18); background: #fff; }
+.stage .qr-wrap { margin-top: 8px; }
+.stage .step { font-size: 32px; }
+/* 投影幕只有 720p 這種小尺寸時，右欄的 QR、步驟、座號燈都縮一點，整個畫面才不會往下捲 */
+@media (max-width: 1400px) {
+  .stage #qr img, .stage #qr canvas { width: 240px !important; height: 240px !important; }
+  .stage .qr-wrap { gap: 28px; }
+  .stage .step { font-size: 26px; margin-top: 10px; }
+  .stage .chips.big .chip { font-size: 20px; padding: 4px 12px; }
+}
 .step { font-size: 40px; font-weight: 700; color: var(--navy); margin-top: 16px; }
 .screen .chips.big { gap: 10px; }
 .screen .chips.big .chip { font-size: 26px; padding: 6px 16px; border-radius: 12px; }
