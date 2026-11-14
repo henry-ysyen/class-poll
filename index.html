@@ -11,7 +11,7 @@
 <div id="banner"></div>
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, optBadge } from './store.js';
+import { createStore, qs, el, $, optBadge, createImageCache } from './store.js';
 import { findQuestion, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
 
 const app = $('#app');
@@ -31,10 +31,14 @@ async function main() {
   let state = null, students = {}, lastSession = null;
   let unsubAns = null, myAns = null, lastKey = '', lastDraw = '', draft = '';
   let ui = {}; // 畫面上要「就地更新」的元件（不整個重畫，打字中才不會被打斷）
+  // 看圖（gallery）用的三個：一樣要在訂閱之前宣告（重新整理時老師若正停在看圖那一項，訂閱一掛上就會畫看圖畫面）
+  const caches = {}; // 每個題組一份圖片快取（同一張只抓一次）
+  const galPos = {}; // 看到第幾張（老師切走再切回來，還停在同一張）
+  let galRetry = null;
   // 下面三個要在訂閱之前宣告，訂閱一掛上就會畫畫面
   const N = () => Math.max(1, Math.min(60, (state && state.n) || +qs('n', DEFAULT_N) || DEFAULT_N));
   function checkIn() { store.set(`students/${seat}`, { t: Date.now(), s: state ? state.session : null }); }
-  function render() { seat ? showQuestion() : pickSeat(); }
+  function render() { if (!seat) document.body.classList.remove('galmode'); seat ? showQuestion() : pickSeat(); }
 
   store.on('students', (s) => { students = s || {}; if (!seat) render(); });
   store.on('state', (s) => {
@@ -83,7 +87,10 @@ async function main() {
   }
   function showQuestion() {
     const q = state && state.qid ? findQuestion(state.set, state.qid) : null;
-    const slide = !!(q && q.type === 'slide'); // 投影頁（例如點字對照表揭曉）：平板不作答，只叫學生看投影幕
+    const gallery = !!(q && q.type === 'gallery'); // 自己看圖：整個畫面拿來放圖
+    document.body.classList.toggle('galmode', gallery);
+    if (gallery) return showGallery(q);
+    const slide = !!(q && (q.type === 'slide' || q.type === 'pic')); // 投影頁（點字對照表揭曉、投影圖片）：平板不作答，只叫學生看投影幕
     if (!q || slide) {
       if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
       const cover = !!(state && state.screen === 'cover');
@@ -105,6 +112,60 @@ async function main() {
       return; // 訂閱時會立刻回呼一次，由 draw 畫
     }
     draw(q, key);
+  }
+
+  // ---- 自己看圖（gallery）：左右滑、按箭頭換張；兩指撥開可以放大看細節 ----
+  function showGallery(q) {
+    if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
+    const key = `gal|${state.set}|${q.id}`;
+    if (key === lastDraw) return; // 老師按倒數之類的更新不重畫，學生看到一半不會被打斷
+    lastDraw = key;
+    const ids = q.images || [];
+    const cache = caches[state.set] || (caches[state.set] = createImageCache(store, state.set));
+    let idx = Math.min(galPos[key] || 0, Math.max(0, ids.length - 1));
+    let preloading = false;
+    const alive = () => lastDraw === key;
+    const img = el('img', { class: 'gal-img', alt: '' });
+    const msg = el('div', { class: 'gal-msg' }, '圖片載入中…');
+    const count = el('div', { class: 'gal-count' });
+    const load = el('div', { class: 'gal-load' });
+    const prevB = el('button', { class: 'gal-nav prev', onclick: () => go(idx - 1) }, '‹');
+    const nextB = el('button', { class: 'gal-nav next', onclick: () => go(idx + 1) }, '›');
+    const stage = el('div', { class: 'gal-stage' }, img, msg, prevB, nextB);
+    function go(i) { if (i < 0 || i >= ids.length) return; idx = i; galPos[key] = i; paint(); }
+    function startPreload() {
+      if (preloading) return;
+      preloading = true;
+      cache.preload(ids, (n) => { if (alive()) load.textContent = n < ids.length ? `其他的圖準備中 ${n} / ${ids.length}` : ''; })
+        .then((n) => { if (n < ids.length) preloading = false; });
+    }
+    function paint() {
+      const want = idx;
+      count.textContent = `${idx + 1} / ${ids.length}`;
+      prevB.disabled = idx === 0; nextB.disabled = idx === ids.length - 1;
+      img.style.visibility = 'hidden'; msg.textContent = '圖片載入中…'; msg.style.display = '';
+      cache.get(ids[want]).then((src) => {
+        if (!alive() || want !== idx) return;
+        img.src = src; img.style.visibility = ''; msg.style.display = 'none';
+        startPreload();
+      }).catch((e) => {
+        if (!alive() || want !== idx) return;
+        msg.textContent = e.message === 'closed' ? '老師還沒開放圖片，請等一下' : '這張圖還沒準備好，請等一下';
+        clearTimeout(galRetry); galRetry = setTimeout(() => { if (alive() && want === idx) paint(); }, 3000);
+      });
+    }
+    // 手指左右滑換張；放大的時候不換張，讓他可以移動畫面看細節
+    let sx = 0, sy = 0, multi = false;
+    stage.addEventListener('touchstart', (e) => { multi = e.touches.length > 1; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    stage.addEventListener('touchend', (e) => {
+      if (multi || (window.visualViewport && window.visualViewport.scale > 1.05)) return;
+      const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) go(idx + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+    app.replaceChildren(el('div', { class: 'gal' },
+      el('div', { class: 'gal-top' }, el('span', { class: 'seat-badge' }, seat), el('span', { class: 'gal-hint' }, '左右滑，或按兩邊的箭頭。不說話，慢慢看。'), count),
+      stage, load));
+    paint();
   }
 
   function draw(q, key) {

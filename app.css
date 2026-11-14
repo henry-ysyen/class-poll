@@ -59,6 +59,22 @@ code { font-family: Consolas, "Microsoft JhengHei", monospace; }
 .prefix { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .student input[type=text] { font-size: 22px; padding: 14px; }
 
+/* 學生頁：自己看圖（題型 gallery）。整個畫面拿來放圖，深色底；圖用 contain 整張放進去，兩指撥開可以放大 */
+body.student.galmode { max-width: none; padding: 0; background: #16181d; }
+.gal { position: fixed; inset: 0; display: flex; flex-direction: column; background: #16181d; } /* 蓋滿整個畫面，頁面本身不會捲動 */
+.gal-top { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: #fff; }
+.gal-top .seat-badge { width: 36px; height: 36px; font-size: 18px; background: #fff; color: var(--navy); }
+.gal-hint { flex: 1; font-size: 16px; color: #cfd3da; }
+.gal-count { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gal-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.gal-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.gal-msg { position: relative; color: #cfd3da; font-size: 22px; }
+.gal-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 60px; height: 110px; font-size: 54px; line-height: 1; padding: 0 0 8px; border: 0; border-radius: 14px; background: rgba(255,255,255,.8); color: var(--navy); }
+.gal-nav.prev { left: 8px; }
+.gal-nav.next { right: 8px; }
+.gal-nav:disabled { opacity: .15; }
+.gal-load { text-align: center; color: #9aa0aa; font-size: 14px; min-height: 24px; padding: 2px 0 6px; }
+
 /* 老師頁（手機優先，筆電也能用） */
 .teacher { max-width: 640px; margin: 0 auto; }
 .topbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -152,6 +168,16 @@ body.screen.nobar { padding-bottom: 24px; } /* 待機畫面（掃碼／蓋上）
 .corner { position: fixed; right: 32px; bottom: 24px; text-align: center; }
 .screen .wait { font-size: 36px; padding: 80px 0; }
 .screen .hint { font-size: 22px; color: var(--muted); margin-top: 24px; }
+
+/* 投影：整面放一張圖（題型 pic，老師帶讀），深色底、整張放進去；右下角小小的「第幾張」 */
+body.screen.picmode { padding: 0; background: #16181d; }
+.pic { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+.pic-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.pic-msg { position: relative; color: #cfd3da; font-size: 32px; }
+.pic-no { position: absolute; right: 18px; bottom: 12px; font-size: 20px; color: rgba(255,255,255,.8); background: rgba(0,0,0,.35); padding: 2px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+/* 投影：學生在平板上自己看圖的時候（題型 gallery），只放指示和大大的倒數 */
+.galwait { padding-top: 14vh; }
+.galwait .timer { font-size: 130px; margin-top: 4vh; }
 
 /* 揭曉頁：點字 0～9 對照表，兩列五格；點距跟著投影幕大小縮放（1080p 約 65px，720p 約 44px），兩列加標題放得進提示條上方 */
 .screen .legend { font-size: 22px; color: var(--ink2); text-align: right; line-height: 1.5; white-space: nowrap; }

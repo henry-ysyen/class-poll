@@ -2,9 +2,33 @@
 // 有 Firebase 設定就走 Firebase 即時資料庫；沒有就走本機模式（localStorage＋分頁之間的 storage 事件）。
 import { firebaseConfig } from './firebase-config.js';
 
+// 網址加 ?local=1＝強制走本機模式（改程式時試流程用，不會碰到正式資料庫）
 export async function createStore(room) {
-  if (firebaseConfig) return firebaseStore(room);
+  if (firebaseConfig && !qs('local')) return firebaseStore(room);
   return localStore(room);
+}
+
+// 圖片（繪本頁）的門禁：老師頁出「看圖／投影圖片」那一項時，把 pics 寫成當下的時間；
+// 資料庫規則只在這個時間之後的 90 分鐘內讓人讀 gallery（圖片），過了自動關，老師忘了收也沒關係。
+// 圖不放在倉庫裡（倉庫是公開的、刪了檔舊版紀錄還在），放資料庫，下課整包刪掉。
+export const PICS_WINDOW = 90 * 60 * 1000;
+export function picsOpen(pics) { return typeof pics === 'number' && pics > 0 && pics + PICS_WINDOW > Date.now(); }
+
+// 圖片快取：同一張只抓一次；抓失敗（例如老師還沒開放）就不記，下次再抓
+export function createImageCache(store, set) {
+  const memo = new Map();
+  return {
+    get(id) {
+      if (!memo.has(id)) memo.set(id, store.image(set, id).catch((e) => { memo.delete(id); throw e; }));
+      return memo.get(id);
+    },
+    // 背景把整組先抓好（一張一張來，不搶頻寬）；onProgress(已抓到幾張)
+    async preload(ids, onProgress) {
+      let done = 0;
+      for (const id of ids) { try { await this.get(id); done++; if (onProgress) onProgress(done); } catch { /* 之後看到那張時會再試 */ } }
+      return done;
+    },
+  };
 }
 
 // ---------- 本機模式 ----------
@@ -49,6 +73,12 @@ function localStore(room) {
     async set(path, val) { write(setAt(read(), path, val)); },
     async update(path, obj) { let doc = read(); for (const [k, v] of Object.entries(obj)) doc = setAt(doc, path ? `${path}/${k}` : k, v); write(doc); },
     async remove(path) { write(setAt(read(), path, null)); },
+    stamp() { return Date.now(); },
+    // 本機模式的圖片：直接讀資料夾 gallery-local/<題組>/<編號>.jpg（這個資料夾不進版本紀錄）；門禁照樣模擬
+    async image(set, id) {
+      if (!picsOpen(getAt(read(), 'pics'))) throw new Error('closed');
+      return `gallery-local/${set}/${id}.jpg`;
+    },
   };
 }
 
@@ -62,11 +92,24 @@ async function firebaseStore(room) {
   const r = (path) => fdb.ref(db, path ? `${base}/${path}` : base);
   return {
     mode: 'firebase',
-    on(path, cb) { return fdb.onValue(r(path), (snap) => cb(snap.val())); },
+    // 第三個參數：讀不到（規則不准）時當成沒有資料，不讓頁面卡住
+    on(path, cb) { return fdb.onValue(r(path), (snap) => cb(snap.val()), () => cb(null)); },
     async once(path) { return (await fdb.get(r(path))).val(); },
     async set(path, val) { await fdb.set(r(path), val); },
     async update(path, obj) { await fdb.update(r(path), obj); },
     async remove(path) { await fdb.remove(r(path)); },
+    stamp() { return fdb.serverTimestamp(); }, // 資料庫自己的時鐘（不靠手機的時間）
+    // 圖片存成一長串文字（data:image/jpeg;base64,…）。用一般的網頁下載去拿，不走即時連線，
+    // 這樣 21 台平板抓圖時，出題、作答那條即時連線不會被塞住。規則不准（老師還沒開放／過了 90 分鐘）會回 401。
+    async image(set, id) {
+      const url = `${firebaseConfig.databaseURL}/rooms/${encodeURIComponent(room)}/gallery/${encodeURIComponent(set)}/${encodeURIComponent(id)}.json`;
+      const res = await fetch(url);
+      if (res.status === 401 || res.status === 403) throw new Error('closed');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const v = await res.json();
+      if (!v || typeof v !== 'string') throw new Error('missing');
+      return v;
+    },
   };
 }
 

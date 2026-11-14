@@ -26,6 +26,23 @@
               }
             }
           }
+        },
+        "key": {
+          ".read": false,
+          ".write": true,
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "pics": {
+          ".read": true,
+          ".write": "newData.parent().child('key').val() !== data.parent().child('key').val() && newData.parent().child('key').val().beginsWith(root.child('rooms/' + $room + '/config/pin').val() + ':')",
+          ".validate": "newData.isNumber()"
+        },
+        "gallery": {
+          ".read": "root.child('rooms/' + $room + '/pics').isNumber() && root.child('rooms/' + $room + '/pics').val() > 0 && root.child('rooms/' + $room + '/pics').val() + 5400000 > now",
+          ".write": "newData.parent().child('key').val() !== data.parent().child('key').val() && newData.parent().child('key').val().beginsWith(root.child('rooms/' + $room + '/config/pin').val() + ':')",
+          "$set": {
+            "$id": { ".validate": "newData.isString() && newData.val().length < 1500000" }
+          }
         }
       }
     }

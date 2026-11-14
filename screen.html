@@ -11,8 +11,8 @@
 <body class="screen">
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
-import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally } from './store.js';
-import { SETS, DEFAULT_ROOM } from './questions.js';
+import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally, createImageCache } from './store.js';
+import { SETS, DEFAULT_ROOM, setImages } from './questions.js';
 import { brailleChart } from './braille.js';
 
 const app = $('#app');
@@ -25,6 +25,10 @@ async function main() {
   const store = await createStore(room);
   let state = null, answers = {}, students = {}, unsubAns = null, lastSession = null;
   let timerEl = null; // 倒數數字：每半秒就地更新，不整頁重畫
+  let picKey = '', picRetry = null; // 現在投影的是哪一張圖（同一張不重放）
+  // 繪本圖片的快取（要在訂閱之前宣告：訂閱一掛上就會畫畫面，老師若正停在圖片那一項就會用到）
+  const caches = {}, preloading = {};
+  const cacheFor = (set) => caches[set] || (caches[set] = createImageCache(store, set));
   setInterval(tick, 500);
   const base = location.href.replace(/[^/]*$/, '');
   const studentUrl = `${base}index.html${room === DEFAULT_ROOM ? '' : '?r=' + encodeURIComponent(room)}`;
@@ -46,7 +50,10 @@ async function main() {
     const q = SET && state.qid ? SET.questions.find((x) => x.id === state.qid) : null;
     const joinedList = state ? joinedSeats(students, state.session) : [];
     const joined = joinedList.length;
-    document.body.classList.toggle('nobar', !q); // 待機畫面沒有底部提示條，不用留那 130px（720p 的封面畫面才放得下）
+    const isPic = !!(q && q.type === 'pic');
+    document.body.classList.toggle('nobar', !q || isPic); // 待機畫面、整面放圖都沒有底部提示條，不用留那 130px（720p 的封面畫面才放得下）
+    document.body.classList.toggle('picmode', isPic);
+    if (!isPic) picKey = '';
 
     // 待機：掃碼畫面 或 平板蓋上
     if (!q) {
@@ -55,6 +62,8 @@ async function main() {
       return drawQr(joinedList, (state && state.n) || 30, SET ? SET.title : `教室 ${room}`);
     }
     if (q.type === 'slide') return drawSlide(q);
+    if (q.type === 'pic') return drawPic(q);
+    if (q.type === 'gallery') return drawGallery(q);
 
     const cur = answers[q.id] || {};
     const answered = Object.keys(cur).length;
@@ -150,6 +159,48 @@ async function main() {
       brailleChart({ highlight: hl, show: on }),
       hintbar(on ? `黃框＝今天摸的三張卡：${hl.join('、')}` : '找找看，你剛剛摸到的是哪一個數字？', true, on ? ' answer' : ''),
     );
+  }
+
+  // ---- 繪本圖片（圖放在資料庫，老師出這一項時才讀得到）----
+  // 把這個題組的圖先抓好，帶讀時每一張都馬上出來
+  function preloadSet(setId) {
+    if (preloading[setId]) return;
+    preloading[setId] = true;
+    const ids = setImages(setId);
+    cacheFor(setId).preload(ids).then((n) => { if (n < ids.length) preloading[setId] = false; });
+  }
+  // 整面放一張圖（老師帶讀）
+  function drawPic(q) {
+    const key = `${state.set}|${q.id}`;
+    if (key === picKey) return; // 學生報到、作答的更新也會叫到這裡，同一張圖不要重放
+    picKey = key;
+    const setId = state.set;
+    const img = el('img', { class: 'pic-img', alt: '', style: 'visibility:hidden' });
+    const msg = el('div', { class: 'pic-msg' }, '圖片載入中…');
+    show(el('div', { class: 'pic' }, img, msg, el('div', { class: 'pic-no' }, q.total ? `${+q.img} / ${q.total}` : q.img)));
+    const tryLoad = () => cacheFor(setId).get(q.img).then((src) => {
+      if (picKey !== key) return;
+      img.src = src; img.style.visibility = ''; msg.remove();
+      preloadSet(setId);
+    }).catch((e) => {
+      if (picKey !== key) return;
+      msg.textContent = e.message === 'closed' ? '圖片還沒開放（老師頁再按一次這一項）' : '這張圖還沒上傳';
+      clearTimeout(picRetry); picRetry = setTimeout(() => { if (picKey === key) tryLoad(); }, 3000);
+    });
+    tryLoad();
+  }
+  // 學生在平板上自己看圖的時候：投影只放指示和倒數
+  function drawGallery(q) {
+    timerEl = state.timer ? el('div', { class: 'timer' }) : null;
+    show(
+      el('div', { class: 'cover galwait' },
+        el('div', { class: 'cover-text' }, '在平板上安靜看圖'),
+        el('div', { class: 'cover-sub' }, `用手指左右滑，一共 ${(q.images || []).length} 張。不說話，慢慢看。`),
+        timerEl),
+      hintbar('時間到的時候，把平板蓋上，眼睛看老師。', true),
+    );
+    tick();
+    preloadSet(state.set);
   }
 
   function hintbar(text, open, extra = '') { return el('div', { class: 'hintbar' + (open ? '' : ' closed') + extra }, text); }

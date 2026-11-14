@@ -2,6 +2,9 @@
 // type: 'choice'＝單選（最多 4 個選項）、'multi'＝複選（點一個存一個、再點取消；長條圖的百分比＝選這項的人 ÷ 作答人數）、
 //       'text'＝開放題（學生打一句，prefix 會自動接在前面）、
 //       'slide'＝投影頁（不作答；目前只有點字 0～9 對照表，highlight＝老師按「顯示答案」時要加黃框的數字，student＝平板上那行字）
+//       'gallery'＝學生在平板上自己左右滑看一組圖（images＝圖的編號），投影幕顯示「在平板上安靜看圖」和倒數；不作答
+//       'pic'＝投影幕整面放一張圖（img＝圖的編號），平板顯示「眼睛看投影幕」；不作答。老師帶讀時一張一張按「下一題」
+//       圖不在這個資料夾裡（倉庫是公開的）：放在資料庫的 gallery/<題組>/<編號>，老師頁「圖片」區上傳／刪除，門禁見 store.js 的 PICS_WINDOW
 // compareWith: 投影頁把這題和指定的題並排（前測／後測對照）
 
 // 班級設定：網址沒帶 r／n 時就用這兩個。學生只要開 index.html（不用任何參數）就進得來，QR code 比較短。
@@ -9,6 +12,11 @@ export const DEFAULT_ROOM = '418';
 export const DEFAULT_N = 21;
 
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '摸不出來'];
+
+// 第 2 節《地下鐵》選的 13 張圖（老師 11/14 選；編號＝掃描檔的檔名 01～13）。名字是給老師在手機上認圖用的，不是書上的字。
+const PAGES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13'];
+const PAGE_NAME = { '01': '地下鐵入口', '02': '金葉子森林', '03': '海底', '04': '月台與列車', '05': '雲裡', '06': '樹籬迷宮', '07': '樓梯森林', '08': '發光的瓶子', '09': '走鋼索', '10': '空空的月台', '11': '舞台上唱歌跳舞', '12': '謝幕', '13': '玫瑰花窗' };
+const pic = (n) => ({ id: 'p' + n, tag: `圖 ${n}`, type: 'pic', img: n, text: PAGE_NAME[n] || '', total: PAGES.length });
 
 export const SETS = {
   L1: {
@@ -32,18 +40,35 @@ export const SETS = {
     ],
   },
   L2: {
-    title: '第 2 節　走進《地下鐵》',
+    // 11/14～15 整節改方向（老師口述＋Henry）：引起動機 → 學生在平板上自己看 13 張圖（3～5 分）→ 老師帶速讀、中間穿插問卷題
+    // → 平板蓋上、關燈講幾米的故事 → 開燈看最後兩張（謝幕、玫瑰花窗）→ 紙本學習單。
+    // 前測、後測、三感官接龍都拿掉了（舊題號 q1、q4～q8 不再用；以前試跑的答案還在資料庫，匯出時會標「題庫裡已沒有這題」）。
+    // ⚠️ s1～s4 四題是 AI 11/15 先放的草稿，題目與選項等老師確認；圖 12、13 排在最後是配合收尾講稿（開燈後才放）。
+    title: '第 2 節　走進《地下鐵》（11/18）',
     questions: [
-      { id: 'q1', tag: '前測', type: 'choice', text: '你覺得看不見的人，他的世界是什麼樣子？', options: ['一片黑', '跟我們差不多', '不一樣，但也很豐富', '不知道'] },
-      // 11/04 老師把第 2 節的「閉眼猜地點」刪了，原本的 q2、q3（這是哪裡？）跟著拿掉；題號不重排，免得跟存檔對不上。
-      { id: 'q4', tag: '寧靜閱讀後', type: 'choice', text: '這幾頁裡，她最常靠哪個感官知道自己在哪裡？', options: ['耳朵', '手', '腳', '鼻子'] },
-      { id: 'q5', tag: '接龍 ①', type: 'text', text: '列車門打開，你聽到什麼？', prefix: '我聽到' },
-      { id: 'q6', tag: '接龍 ②', type: 'text', text: '你摸到什麼？', prefix: '我摸到' },
-      { id: 'q7', tag: '接龍 ③', type: 'text', text: '你聞到什麼？', prefix: '我聞到' },
-      { id: 'q8', tag: '後測', type: 'choice', text: '現在，你覺得看不見的人，他的世界是什麼樣子？', options: ['一片黑', '跟我們差不多', '不一樣，但也很豐富', '不知道'], compareWith: 'q1' },
+      { id: 'm1', tag: '引起動機', type: 'text', text: '上次蒙著眼睛摸東西、摸點字卡，你覺得怎麼樣？', prefix: '我覺得' },
+      { id: 'g1', tag: '自己看圖', type: 'gallery', text: '在平板上安靜看圖', images: PAGES },
+      pic('01'), pic('02'),
+      { id: 's1', tag: '速讀 ①', type: 'multi', text: '金葉子森林這一頁，女孩用了哪些感官？（可複選）', options: ['耳朵聽', '皮膚感覺', '鼻子聞', '眼睛看'] },
+      pic('03'), pic('04'),
+      { id: 's2', tag: '速讀 ②', type: 'choice', text: '她在月台，為什麼聽得到海潮聲？', options: ['月台旁邊真的有海', '那是她想像出來的', '列車的聲音像海浪', '有人在放音樂'] },
+      pic('05'), pic('06'), pic('07'),
+      { id: 's3', tag: '速讀 ③', type: 'choice', text: '她一直迷路。你覺得她現在的心情是？', options: ['害怕', '生氣', '難過', '沒關係，再找找看'] },
+      pic('08'), pic('09'), pic('10'),
+      { id: 's4', tag: '速讀 ④', type: 'choice', text: '「其實，我哪裡都不想去。」你有過這種時候嗎？', options: ['常常', '有時候', '很少', '沒有'] },
+      pic('11'), pic('12'), pic('13'),
     ],
   },
 };
+
+// 這個題組用到哪些圖（老師頁上傳、檢查時用）
+export function setImages(setId) {
+  const set = SETS[setId];
+  if (!set) return [];
+  const ids = new Set();
+  for (const q of set.questions) { if (q.type === 'pic') ids.add(q.img); if (q.type === 'gallery') (q.images || []).forEach((x) => ids.add(x)); }
+  return [...ids].sort();
+}
 
 export function findQuestion(setId, qid) {
   const set = SETS[setId];
