@@ -79,6 +79,7 @@ body.student.galmode { max-width: none; padding: 0; background: #16181d; }
 .teacher { max-width: 640px; margin: 0 auto; }
 .topbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .setpick { font: inherit; font-weight: 700; font-size: 17px; color: var(--navy); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: #fff; max-width: 100%; }
+.topbar > .grow { min-width: 0; } /* 題組下拉選單的寬度跟著最長的題組名稱；手機上不讓它撐出畫面（11/16：L2S 名稱變長，手機會左右捲） */
 .now .q-text { font-size: 22px; margin: 8px 0 6px; }
 .count { font-size: 18px; margin: 4px 0 6px; }
 .count b { font-size: 28px; }
@@ -186,6 +187,10 @@ body.screen.picmode { padding: 0; background: #16181d; }
 .qside .counter .progress { flex: 1; margin-top: 0; }
 .qside .timer { margin-bottom: 0; }
 .qprefix { font-size: 30px; font-weight: 700; color: var(--navy); margin: 0 0 14px; } /* 打字題的句首，只寫一次（卡片裡不重複） */
+/* 帶圖的打字題：卡片寬度跟著句子長短（短句窄、長句寬），一張接一張排、排滿換行；不用固定欄寬，
+   一列的高度不會被那一列最長的句子撐高，全班 21 句才排得下（11/16 G 項）。新卡一樣只接在最後面，前面的卡不動 */
+.qside .cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; }
+.qside .cardt { max-width: 100%; padding: 6px 14px; line-height: 1.25; }
 /* 投影：學生在平板上自己看圖的時候（題型 gallery），只放指示和大大的倒數 */
 .galwait { padding-top: 14vh; }
 .galwait .timer { font-size: 130px; margin-top: 4vh; }

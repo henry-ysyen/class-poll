@@ -30,6 +30,8 @@ async function main() {
   let tv = null; // 打字題的畫面（同一題只加新卡片，不整面重畫）
   // 帶圖題目排版的縮放順序（fitPic 用）：[圖的寬度 vw, 右欄縮放]。一定要在訂閱之前宣告：投影頁在老師停在帶圖題目時才打開，訂閱一掛上就會用到
   const FIT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [56, 50, 44, 40].map((w) => [w, z])).concat([[36, 0.6], [32, 0.6]]);
+  // 打字題（全班的句子都要排得下）：圖可以再縮小到 20vw，字才晚一點縮（11/16 G 項：21 句時 1080p 卡片字不小於 24px）
+  const FIT_TEXT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [56, 50, 44, 40, 32, 26, 20].map((w) => [w, z]));
   // 繪本圖片的快取（要在訂閱之前宣告：訂閱一掛上就會畫畫面，老師若正停在圖片那一項就會用到）
   const caches = {}, preloading = {};
   const cacheFor = (set) => caches[set] || (caches[set] = createImageCache(store, set));
@@ -114,16 +116,16 @@ async function main() {
   // 換畫面：沒帶圖的題目＝原本的 show；帶圖的題目（questions.js 的 img）＝左邊放圖、右邊放原本的內容，提示條照舊在最下面
   function put(q, kids, bar) {
     if (!q.img) { show(...kids, bar); return null; }
-    const wrap = el('div', { class: 'withpic' }, picPanel(q), el('div', { class: 'qside' }, el('div', { class: 'qfit' }, kids)));
+    const wrap = el('div', { class: 'withpic', 'data-text': q.type === 'text' ? '1' : null }, picPanel(q), el('div', { class: 'qside' }, el('div', { class: 'qfit' }, kids)));
     show(wrap, bar);
     fitPic(wrap);
     return wrap;
   }
   // 右邊排不下（會超出畫面）：先把圖縮小（56→40vw），還不夠才把右邊整欄等比例縮小一點（字跟著小）、圖再從大的試起；
-  // 最小到圖 32vw、字 6 成；再排不下就切掉最下面，不出捲軸。（FIT 宣告在 main 最上面：訂閱一掛上就會畫畫面）
+  // 最小到圖 32vw（打字題 20vw）、字 6 成；再排不下就切掉最下面，不出捲軸。（FIT、FIT_TEXT 宣告在 main 最上面：訂閱一掛上就會畫畫面）
   function fitPic(wrap) {
     const side = wrap.querySelector('.qside'), inner = side.firstChild;
-    for (const [w, z] of FIT) {
+    for (const [w, z] of (wrap.dataset.text ? FIT_TEXT : FIT)) {
       wrap.style.setProperty('--picw', w + 'vw');
       inner.style.zoom = z;
       if (inner.getBoundingClientRect().height <= side.clientHeight + 1) return;
