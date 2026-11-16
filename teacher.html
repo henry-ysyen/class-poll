@@ -85,7 +85,9 @@ async function main() {
   // 規則才放行（不知道密碼的人開不了、也改不了）。這幾個寫入跟出題分開送：規則還沒更新時只有圖片開不起來，出題照常。
   let pics = null, picsWarned = false, picsMsg = '';
   const newKey = () => `${pin}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-  const needsPics = (q) => !!q && (q.type === 'gallery' || q.type === 'pic');
+  // 要用到圖的項目：看圖、投影圖片，還有帶圖的題目（questions.js 的 img，11/16 加）
+  const needsPics = (q) => !!q && (q.type === 'gallery' || q.type === 'pic' || !!q.img);
+  const noAnswer = (q) => q.type === 'slide' || q.type === 'gallery' || q.type === 'pic'; // 不作答的項目（帶圖的題目照常作答）
   const say = (t) => { picsMsg = t; const n = $('#picmsg'); if (n) n.textContent = t; };
   async function setPics(on) {
     try { await store.update('', { key: newKey(), pics: on ? store.stamp() : 0 }); return true; }
@@ -99,7 +101,7 @@ async function main() {
   const showQ = async (q) => {
     // 要用到圖的項目：先把圖片開放。已經開著而且還剩 30 分鐘以上就不重寫，帶讀時一張一張按才快。
     if (needsPics(q) && !(picsOpen(pics) && pics + PICS_WINDOW - Date.now() > 30 * 60 * 1000)) await setPics(true);
-    return push({ ...state, qid: q.id, last: q.id, open: q.type !== 'slide' && !needsPics(q), show: q.type === 'text', spot: null, timer: null });
+    return push({ ...state, qid: q.id, last: q.id, open: !noAnswer(q), show: q.type === 'text', spot: null, timer: null });
   };
   const next = () => { const q = SET.questions[pos() + 1]; if (q) showQ(q); };
   const prev = () => { const q = SET.questions[pos() - 1]; if (q) showQ(q); };
@@ -237,6 +239,7 @@ async function main() {
           pick
             ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數')
             : el('span', { class: 'pill on' }, '投影：句子即時出現'),
+          q.img ? picsPill() : null, // 帶圖的題目：投影左邊放圖 q.img
         ),
         el('div', { class: 'q-text' }, q.text),
         el('div', { class: 'count' }, el('b', {}, answered), ` / ${joined} 已作答`),
@@ -266,7 +269,7 @@ async function main() {
       tbl.append(el('div', { class: 'qrow' + (isCur ? ' cur' : '') },
         el('div', { class: 'qn' }, k + 1),
         el('div', { class: 'grow' },
-          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'multi' ? '（複選）' : x.type === 'slide' ? '（投影頁，不作答）' : x.type === 'gallery' ? '（學生在平板自己看圖）' : x.type === 'pic' ? '（投影圖片）' : '') + (n ? `　${n} 人答過` : '')),
+          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'multi' ? '（複選）' : x.type === 'slide' ? '（投影頁，不作答）' : x.type === 'gallery' ? '（學生在平板自己看圖）' : x.type === 'pic' ? '（投影圖片）' : '') + (x.img && x.type !== 'pic' ? `［帶圖 ${x.img}］` : '') + (n ? `　${n} 人答過` : '')),
           el('div', {}, x.text)),
         el('button', { class: isCur ? 'small' : 'small primary', disabled: isCur ? 'disabled' : null, onclick: () => showQ(x) }, isCur ? '出題中' : '出這題'),
       ));
@@ -276,7 +279,7 @@ async function main() {
     // 圖片（題組有用到圖才出現）：上傳、檢查、關閉、刪除
     const expected = setImages(setId);
     const picsSec = expected.length ? section('pics', `圖片（這個題組用 ${expected.length} 張）`,
-      el('div', { class: 'muted small', style: 'margin-top:8px' }, '圖放在資料庫，不在網站的公開資料夾裡。平常讀不到；出「看圖／投影圖片」那一項時自動開放，90 分鐘後自動關，按「收題」也會關。下課後按「刪除圖片」。'),
+      el('div', { class: 'muted small', style: 'margin-top:8px' }, '圖放在資料庫，不在網站的公開資料夾裡。平常讀不到；出「看圖／投影圖片／帶圖的題目」那一項時自動開放，90 分鐘後自動關，按「收題」也會關。下課後按「刪除圖片」。'),
       el('div', { class: 'row', style: 'margin-top:10px' },
         picsPill(),
         el('button', { class: 'small', onclick: checkPics }, '檢查圖片齊不齊'),
@@ -313,11 +316,11 @@ async function main() {
     if (window.QRCode) new QRCode($('#qr'), { text: studentUrl, width: 140, height: 140 });
   }
 
-  // 倒數：沒開 → 1／2／3 分三顆（看圖是 3／4／5 分）；開了 → 剩幾秒＋停止（數字由 tick 每半秒就地更新）
-  function timerRow(mins = [1, 2, 3]) {
+  // 倒數：沒開 → 30 秒／1／2／3 分四顆（看圖是 3／4／5 分；30 秒是 11/16 加的：帶圖的題目先安靜看圖 30 秒）；開了 → 剩幾秒＋停止（數字由 tick 每半秒就地更新）
+  function timerRow(mins = [0.5, 1, 2, 3]) {
     if (!state.timer) {
       return el('div', { class: 'row timer-row' }, el('span', { class: 'muted small' }, '⏱ 投影倒數'),
-        mins.map((m) => el('button', { class: 'small', onclick: () => startTimer(m * 60) }, `${m} 分`)));
+        mins.map((m) => el('button', { class: 'small', onclick: () => startTimer(m * 60) }, m < 1 ? `${m * 60} 秒` : `${m} 分`)));
     }
     ui.timer = el('span', { class: 'timer' });
     const row = el('div', { class: 'row timer-row' }, ui.timer, el('button', { class: 'small', onclick: stopTimer }, timerLeft(state.timer) > 0 ? '停止倒數' : '清掉'));

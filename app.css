@@ -175,6 +175,17 @@ body.screen.picmode { padding: 0; background: #16181d; }
 .pic-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .pic-msg { position: relative; color: #cfd3da; font-size: 32px; }
 .pic-no { position: absolute; right: 18px; bottom: 12px; font-size: 20px; color: rgba(255,255,255,.8); background: rgba(0,0,0,.35); padding: 2px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+/* 投影：題目帶圖（questions.js 的 img，11/16 加）。左邊一直放那張圖，右邊放原本的內容（題目＋選項／長條圖／句子卡片）。
+   高度＝畫面扣掉 body 上下留白（上 24、下 130 給提示條），所以不會出捲軸；右邊排不下時 screen.html 的 fitPic 先縮圖（--picw）、
+   再把右邊整欄等比例縮小（.qfit 的 zoom）。圖框照圖的比例（繪本照片都是 4:3），比例不同的圖會留黑邊 */
+.withpic { --picw: 56vw; display: grid; grid-template-columns: var(--picw) minmax(0, 1fr); gap: 32px; height: calc(100vh - 154px); }
+.qpic { position: relative; align-self: start; aspect-ratio: 4 / 3; max-height: 100%; background: #16181d; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.qside { min-width: 0; overflow: hidden; }
+.qside .top { display: block; } /* 右邊比較窄：人數改排在題目下面一列，題目才有整欄的寬度 */
+.qside .counter { display: flex; align-items: center; gap: 18px; min-width: 0; text-align: left; margin: -12px 0 18px; }
+.qside .counter .progress { flex: 1; margin-top: 0; }
+.qside .timer { margin-bottom: 0; }
+.qprefix { font-size: 30px; font-weight: 700; color: var(--navy); margin: 0 0 14px; } /* 打字題的句首，只寫一次（卡片裡不重複） */
 /* 投影：學生在平板上自己看圖的時候（題型 gallery），只放指示和大大的倒數 */
 .galwait { padding-top: 14vh; }
 .galwait .timer { font-size: 130px; margin-top: 4vh; }
