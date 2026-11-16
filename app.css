@@ -40,7 +40,7 @@ code { font-family: Consolas, "Microsoft JhengHei", monospace; }
 .seat-badge { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 22px; font-weight: 700; vertical-align: middle; }
 .seat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
 .seat-grid button { font-size: 24px; padding: 16px 0; }
-.seat-grid button.taken { background: #e9e8e3; color: var(--muted); }
+.seat-grid button.taken { background: var(--good); color: #fff; border-color: var(--good); } /* 11/16 Henry：灰色不明顯，已經有人按的座號改成綠色 */
 .idle { text-align: center; padding: 36px 16px; }
 .big-seat { font-size: 96px; font-weight: 700; color: var(--navy); line-height: 1; }
 .idle-text { font-size: 30px; font-weight: 700; margin: 14px 0 6px; }
