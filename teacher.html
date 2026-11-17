@@ -67,6 +67,9 @@ async function main() {
   }
   async function push(next) {
     next = { ...next, at: Date.now() };
+    // 資料庫不收 undefined（會整筆拒絕、跳「寫入失敗」）：存成 null 的欄位（timer、spot、last…）讀回來會整個不見，
+    // 再用 state.xxx 帶回去就是 undefined。這裡一律補成 null。（11/17 晚 Henry 實測：關閉作答後按「開放作答」寫不進去）
+    for (const k of Object.keys(next)) if (next[k] === undefined) next[k] = null;
     try { await store.update('', { token: pin, state: next }); }
     catch (e) { alert('寫入失敗：老師密碼可能不對（「工具」裡有「換密碼」），或資料庫規則沒設好。\n' + e.message); throw e; }
   }
@@ -262,7 +265,7 @@ async function main() {
         el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
         timerRow(),
         el('div', { class: 'row btns' },
-          el('button', { class: 'big grow' + (step === 'close' ? ' accent' : ''), onclick: () => push({ ...state, open: !state.open, timer: state.open ? null : state.timer }) }, state.open ? '關閉作答' : '開放作答'),
+          el('button', { class: 'big grow' + (step === 'close' ? ' accent' : ''), onclick: () => push({ ...state, open: !state.open, timer: state.open ? null : (state.timer || null) }) }, state.open ? '關閉作答' : '開放作答'),
           pick ? el('button', { class: 'big grow' + (step === 'show' ? ' accent' : ''), onclick: () => push({ ...state, show: !state.show }) }, state.show ? '隱藏結果' : '顯示結果') : null,
         ),
         el('div', { class: 'row btns' },
