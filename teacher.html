@@ -13,7 +13,7 @@
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
 import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally, picsOpen, PICS_WINDOW } from './store.js';
-import { SETS, DEFAULT_ROOM, DEFAULT_N, setImages } from './questions.js';
+import { SETS, DEFAULT_ROOM, DEFAULT_N, setImages, answerSet, answerTypos } from './questions.js';
 
 const app = $('#app');
 const room = qs('r', DEFAULT_ROOM);
@@ -86,8 +86,8 @@ async function main() {
   let pics = null, picsWarned = false, picsMsg = '';
   const newKey = () => `${pin}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
   // 要用到圖的項目：看圖、投影圖片，還有帶圖的題目（questions.js 的 img，11/16 加）
-  const needsPics = (q) => !!q && (q.type === 'gallery' || q.type === 'pic' || !!q.img);
-  const noAnswer = (q) => q.type === 'slide' || q.type === 'gallery' || q.type === 'pic'; // 不作答的項目（帶圖的題目照常作答）
+  const needsPics = (q) => !!q && (q.type === 'gallery' || q.type === 'pic' || !!q.img); // 帶圖的口頭題（oral）也算：它有 img
+  const noAnswer = (q) => q.type === 'slide' || q.type === 'gallery' || q.type === 'pic' || q.type === 'oral'; // 不作答的項目（帶圖的題目照常作答；口頭題用說的）
   const say = (t) => { picsMsg = t; const n = $('#picmsg'); if (n) n.textContent = t; };
   async function setPics(on) {
     try { await store.update('', { key: newKey(), pics: on ? store.stamp() : 0 }); return true; }
@@ -227,21 +227,37 @@ async function main() {
         el('div', { class: 'row btns' }, nextBtn()),
         el('div', { class: 'row', style: 'margin-top:8px' }, prevBtn(), closeBtn()),
       );
+    } else if (q.type === 'oral') {
+      // 口頭題（11/17 加）：不在平板作答，沒有關閉作答／顯示結果，只有上一項、下一項
+      now = el('div', { class: 'card now' },
+        el('div', { class: 'row', style: 'gap:6px' },
+          el('div', { class: 'q-tag', style: 'margin-right:4px' }, `第 ${i + 1}／${SET.questions.length}　${q.tag || ''}（口頭，不作答）`),
+          q.img ? picsPill() : null,
+        ),
+        el('div', { class: 'q-text' }, q.text),
+        q.options && q.options.length ? el('div', { class: 'muted' }, `投影上列出：${q.options.join('、')}（不能點）`) : null,
+        el('div', { class: 'muted small' }, `投影幕放${q.img ? `圖 ${q.img} 和` : ''}這句問句，提示條寫「這一題用說的，舉手回答」；平板顯示「這一題用說的」，不作答。`),
+        el('div', { class: 'row btns' }, nextBtn()),
+        el('div', { class: 'row', style: 'margin-top:8px' }, prevBtn(), closeBtn()),
+      );
     } else {
       const pct = joined ? Math.round(answered / joined * 100) : 0;
       // 按鈕順序照老婆定的：出題 → 關閉作答 → 顯示結果 → 下一題；輪到哪一步，那顆就亮黃色
       const pick = q.type === 'choice' || q.type === 'multi'; // 單選與複選都走「顯示結果」出長條圖
+      const hasAns = !!answerSet(q); // 有 answer：按「顯示結果」時投影與平板一起公布答案（11/17 加）
+      const typos = answerTypos(q);
       const step = state.open ? 'close' : (pick && !state.show) ? 'show' : 'next';
       now = el('div', { class: 'card now' },
         el('div', { class: 'row', style: 'gap:6px' },
           el('div', { class: 'q-tag', style: 'margin-right:4px' }, `第 ${i + 1}／${SET.questions.length} 題　${q.tag || ''}`),
           el('span', { class: 'pill ' + (state.open ? 'on' : 'off') }, state.open ? '作答中' : '已關閉'),
           pick
-            ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? '投影：顯示結果' : '投影：只顯示人數')
+            ? el('span', { class: 'pill ' + (state.show ? 'on' : 'off') }, state.show ? (hasAns ? '投影：顯示結果＋答案' : '投影：顯示結果') : '投影：只顯示人數')
             : el('span', { class: 'pill on' }, '投影：句子即時出現'),
           q.img ? picsPill() : null, // 帶圖的題目：投影左邊放圖 q.img
         ),
         el('div', { class: 'q-text' }, q.text),
+        typos.length ? el('div', { class: 'small', style: 'color:var(--bad)' }, `⚠️ questions.js 這題的 answer 有字跟選項對不上：${typos.join('、')}${hasAns ? '（對得上的照常公布）' : '（這題不會公布答案）'}`) : null,
         el('div', { class: 'count' }, el('b', {}, answered), ` / ${joined} 已作答`),
         el('div', { class: 'progress' }, el('div', { class: 'fill', style: `width:${pct}%` })),
         timerRow(),
@@ -269,7 +285,7 @@ async function main() {
       tbl.append(el('div', { class: 'qrow' + (isCur ? ' cur' : '') },
         el('div', { class: 'qn' }, k + 1),
         el('div', { class: 'grow' },
-          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'multi' ? '（複選）' : x.type === 'slide' ? '（投影頁，不作答）' : x.type === 'gallery' ? '（學生在平板自己看圖）' : x.type === 'pic' ? '（投影圖片）' : '') + (x.img && x.type !== 'pic' ? `［帶圖 ${x.img}］` : '') + (n ? `　${n} 人答過` : '')),
+          el('div', { class: 'muted small' }, (x.tag || '') + (x.type === 'text' ? '（開放題）' : x.type === 'multi' ? '（複選）' : x.type === 'slide' ? '（投影頁，不作答）' : x.type === 'gallery' ? '（學生在平板自己看圖）' : x.type === 'pic' ? '（投影圖片）' : x.type === 'oral' ? '（口頭，不作答）' : '') + (x.img && x.type !== 'pic' ? `［帶圖 ${x.img}］` : '') + (n ? `　${n} 人答過` : '')),
           el('div', {}, x.text)),
         el('button', { class: isCur ? 'small' : 'small primary', disabled: isCur ? 'disabled' : null, onclick: () => showQ(x) }, isCur ? '出題中' : '出這題'),
       ));
@@ -400,11 +416,12 @@ async function main() {
     const { counts, respondents } = tally(q, cur); // 複選：一人可選多項，長條寬度＝選這項的人 ÷ 作答人數
     const total = Math.max(1, respondents);
     const n = q.options.length;
+    const right = answerSet(q); // 有 answer：答案那幾列標「✓ 答案」（老師頁一直看得到；投影與平板要按「顯示結果」才公布）
     return el('div', { class: 'mini' },
-      el('div', { class: 'muted small' }, (q.type === 'multi' ? `分布（複選，${respondents} 人作答、一人可選多項；` : '分布（') + '只有你看得到；投影要按「顯示結果」才出長條圖）'),
-      q.options.map((opt, i) => { const b = optBadge(opt, i, n); return el('div', { class: 'mini-row' },
+      el('div', { class: 'muted small' }, (q.type === 'multi' ? `分布（複選，${respondents} 人作答、一人可選多項；` : '分布（') + '只有你看得到；投影要按「顯示結果」才出長條圖' + (right ? '，答案也是那時才公布' : '') + '）'),
+      q.options.map((opt, i) => { const b = optBadge(opt, i, n); const ok = !!(right && right.has(i)); return el('div', { class: 'mini-row' },
         el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label),
-        el('div', { class: 'mini-track' }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${b.bg}` }), el('span', { class: 'mini-label' }, b.label === String(opt) ? '' : opt)),
+        el('div', { class: 'mini-track' + (ok ? ' right' : '') }, el('div', { class: 'mini-fill', style: `width:${Math.round(counts[i] / total * 100)}%;background:${b.bg}` }), el('span', { class: 'mini-label' }, b.label === String(opt) ? '' : opt, ok ? el('span', { class: 'mini-ans' }, '✓ 答案') : null)),
         el('b', {}, counts[i])); }));
   }
   function sentences(q, cur) {

@@ -49,6 +49,13 @@ code { font-family: Consolas, "Microsoft JhengHei", monospace; }
 .opt { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; font-size: 21px; padding: 14px; margin-bottom: 10px; border-width: 2px; }
 .opt.sel { border-color: var(--navy); background: #eef3fb; box-shadow: inset 0 0 0 2px var(--navy); }
 .opt .tick { min-width: 30px; text-align: right; font-size: 26px; font-weight: 700; color: var(--navy); } /* 複選題：選到的打 ✓ */
+/* 公布答案後（題目有 answer、老師按了「顯示結果」，11/17 加）：答案＝綠底綠框＋「✓ 答案」；自己選的＝藍框＋「你選的」；其他淡掉 */
+.reveal .opt:disabled { opacity: .4; }
+.reveal .opt.sel:disabled, .reveal .opt.right:disabled { opacity: 1; }
+.opt.right { border-color: var(--good); background: #e2f0d9; }
+.opt.right.sel { box-shadow: inset 0 0 0 3px var(--navy); }
+.opt .ans { white-space: nowrap; font-size: 17px; font-weight: 700; color: var(--navy); }
+.opt.right .ans { color: #2e6b1f; }
 /* 超過 4 個選項（0～9＋摸不出來）：格子排 */
 .opt-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
 .opt.cell { justify-content: center; font-size: 30px; font-weight: 700; padding: 14px 0; margin: 0; }
@@ -92,6 +99,8 @@ body.student.galmode { max-width: none; padding: 0; background: #16181d; }
 .mini-track { position: relative; height: 32px; background: #f0efec; border-radius: 8px; overflow: hidden; }
 .mini-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .45; transition: width .3s ease; }
 .mini-label { position: absolute; left: 10px; top: 0; bottom: 0; display: flex; align-items: center; font-weight: 600; }
+.mini-track.right { box-shadow: inset 0 0 0 3px var(--good); } /* 題目有 answer：答案那一列綠框＋「✓ 答案」（11/17 加） */
+.mini-ans { margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--good); color: #fff; font-size: 13px; white-space: nowrap; }
 .sent { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; font-size: 17px; }
 .sent.spot { background: var(--navy); color: #fff; border-color: var(--navy); }
 .sent .seat-no { flex: none; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }
@@ -178,9 +187,10 @@ body.screen.picmode { padding: 0; background: #16181d; }
 .pic-no { position: absolute; right: 18px; bottom: 12px; font-size: 20px; color: rgba(255,255,255,.8); background: rgba(0,0,0,.35); padding: 2px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 /* 投影：題目帶圖（questions.js 的 img，11/16 加）。左邊一直放那張圖，右邊放原本的內容（題目＋選項／長條圖／句子卡片）。
    高度＝畫面扣掉 body 上下留白（上 24、下 130 給提示條），所以不會出捲軸；右邊排不下時 screen.html 的 fitPic 先縮圖（--picw）、
-   再把右邊整欄等比例縮小（.qfit 的 zoom）。圖框照圖的比例（繪本照片都是 4:3），比例不同的圖會留黑邊 */
+   再把右邊整欄等比例縮小（.qfit 的 zoom）。11/17：圖框跟著圖的比例（--ar，圖讀進來時由 screen.html 設定），沒有黑邊；
+   繪本跨頁約 1.9:1，圖的寬度從 64vw 試起，寬度上限＝可用高度 × 寬高比（fitPic 算） */
 .withpic { --picw: 56vw; display: grid; grid-template-columns: var(--picw) minmax(0, 1fr); gap: 32px; height: calc(100vh - 154px); }
-.qpic { position: relative; align-self: start; aspect-ratio: 4 / 3; max-height: 100%; background: #16181d; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.qpic { position: relative; align-self: start; width: 100%; aspect-ratio: var(--ar, 4 / 3); max-height: 100%; background: #16181d; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .qside { min-width: 0; overflow: hidden; }
 .qside .top { display: block; } /* 右邊比較窄：人數改排在題目下面一列，題目才有整欄的寬度 */
 .qside .counter { display: flex; align-items: center; gap: 18px; min-width: 0; text-align: left; margin: -12px 0 18px; }
@@ -191,6 +201,22 @@ body.screen.picmode { padding: 0; background: #16181d; }
    一列的高度不會被那一列最長的句子撐高，全班 21 句才排得下（11/16 G 項）。新卡一樣只接在最後面，前面的卡不動 */
 .qside .cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; }
 .qside .cardt { max-width: 100%; padding: 6px 14px; line-height: 1.25; }
+/* 投影：口頭題（題型 oral，11/17 加）。上面一列大字問句（1080p 約 76px，720p 約 50px），下面整塊放圖（照圖的比例、越大越好、沒有黑框），
+   最下面提示條。高度跟帶圖題目一樣扣掉上 24、下 130，不出捲軸 */
+.oral { display: flex; flex-direction: column; gap: 2vh; height: calc(100vh - 154px); }
+.oral-q { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 32px; }
+.oral-text { font-size: clamp(40px, 7vh, 84px); font-weight: 700; color: var(--navy); line-height: 1.2; }
+.oral-opts { display: flex; gap: 20px; }
+.oral-opts span { font-size: clamp(32px, 5.5vh, 64px); font-weight: 700; background: #fff; border: 3px solid var(--line); border-radius: 16px; padding: 2px 28px; }
+.opic { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.opic .pic-msg { color: var(--ink2); }
+/* 投影：選擇題公布答案（questions.js 的 answer，11/17 加）。最左邊多一欄綠色 ✓、答案的長條加綠框，其他列淡掉 */
+.bars.has-ans .bar-row { grid-template-columns: 52px 56px 1fr 150px; }
+.bars.dense.has-ans .bar-row { grid-template-columns: 44px 44px 1fr 120px; }
+.ans-mark.on { width: 52px; height: 52px; border-radius: 50%; background: var(--good); color: #fff; font-size: 34px; font-weight: 900; display: grid; place-items: center; }
+.bars.dense .ans-mark.on { width: 44px; height: 44px; font-size: 26px; }
+.bar-row.right .bar-track { outline: 5px solid var(--good); outline-offset: 2px; }
+.bar-row.dim { opacity: .35; }
 /* 投影：學生在平板上自己看圖的時候（題型 gallery），只放指示和大大的倒數 */
 .galwait { padding-top: 14vh; }
 .galwait .timer { font-size: 130px; margin-top: 4vh; }

@@ -12,7 +12,7 @@
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
 import { createStore, qs, el, $, optBadge, joinedSeats, timerLeft, fmtTime, tally, createImageCache } from './store.js';
-import { SETS, DEFAULT_ROOM, setImages } from './questions.js';
+import { SETS, DEFAULT_ROOM, setImages, answerSet } from './questions.js';
 import { brailleChart } from './braille.js';
 
 const app = $('#app');
@@ -27,11 +27,13 @@ async function main() {
   let timerEl = null; // 倒數數字：每半秒就地更新，不整頁重畫
   let picKey = '', picRetry = null; // 現在投影的是哪一張圖（同一張不重放）
   let qpic = null, qpicRetry = null; // 帶圖題目左邊那張圖（同一題重畫時沿用同一個元件，學生作答的更新不會讓圖閃）
+  let lastAr = 1.9; // 上一張帶圖的寬高比（繪本跨頁約 1.9:1）：新的一題先用它排，圖讀進來再換成那張圖自己的比例，圖框才不會跳一下
   let tv = null; // 打字題的畫面（同一題只加新卡片，不整面重畫）
   // 帶圖題目排版的縮放順序（fitPic 用）：[圖的寬度 vw, 右欄縮放]。一定要在訂閱之前宣告：投影頁在老師停在帶圖題目時才打開，訂閱一掛上就會用到
-  const FIT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [56, 50, 44, 40].map((w) => [w, z])).concat([[36, 0.6], [32, 0.6]]);
+  // 11/17：圖框改成跟著圖的比例（不再寫死 4:3、沒有黑邊），繪本跨頁扁扁的，圖可以從 64vw 試起
+  const FIT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [64, 60, 56, 50, 44, 40].map((w) => [w, z])).concat([[36, 0.6], [32, 0.6]]);
   // 打字題（全班的句子都要排得下）：圖可以再縮小到 20vw，字才晚一點縮（11/16 G 項：21 句時 1080p 卡片字不小於 24px）
-  const FIT_TEXT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [56, 50, 44, 40, 32, 26, 20].map((w) => [w, z]));
+  const FIT_TEXT = [1, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6].flatMap((z) => [64, 60, 56, 50, 44, 40, 32, 26, 20].map((w) => [w, z]));
   // 繪本圖片的快取（要在訂閱之前宣告：訂閱一掛上就會畫畫面，老師若正停在圖片那一項就會用到）
   const caches = {}, preloading = {};
   const cacheFor = (set) => caches[set] || (caches[set] = createImageCache(store, set));
@@ -74,6 +76,7 @@ async function main() {
     if (q.type === 'slide') return drawSlide(q);
     if (q.type === 'pic') return drawPic(q);
     if (q.type === 'gallery') return drawGallery(q);
+    if (q.type === 'oral') return drawOral(q);
 
     const cur = answers[q.id] || {};
     const answered = Object.keys(cur).length;
@@ -110,7 +113,20 @@ async function main() {
       ));
       return;
     }
-    put(q, [top, bars(q, cur)]);
+    // 有 answer 的題目：長條圖標出答案，提示條變綠色寫出答案（沒有 answer 的題目跟以前一樣，沒有提示條）
+    const right = answerSet(q);
+    put(q, [top, bars(q, cur)], right ? hintbar('✓ 答案：' + q.options.filter((_, i) => right.has(i)).join('、'), true, ' answer') : null);
+  }
+
+  // 口頭題（11/17 加）：上面一列大字的問句（有 options 就在旁邊列出來，不能點），下面整塊放圖（照圖的比例越大越好），最下面提示條
+  function drawOral(q) {
+    const opts = q.options && q.options.length ? el('div', { class: 'oral-opts' }, q.options.map((o) => el('span', {}, o))) : null;
+    show(
+      el('div', { class: 'oral' },
+        el('div', { class: 'oral-q' }, el('span', { class: 'q-tag' }, q.tag || ''), el('span', { class: 'oral-text' }, q.text), opts),
+        q.img ? picPanel(q, 'opic') : null),
+      hintbar('這一題用說的，舉手回答。', true),
+    );
   }
 
   // 換畫面：沒帶圖的題目＝原本的 show；帶圖的題目（questions.js 的 img）＝左邊放圖、右邊放原本的內容，提示條照舊在最下面
@@ -125,20 +141,32 @@ async function main() {
   // 最小到圖 32vw（打字題 20vw）、字 6 成；再排不下就切掉最下面，不出捲軸。（FIT、FIT_TEXT 宣告在 main 最上面：訂閱一掛上就會畫畫面）
   function fitPic(wrap) {
     const side = wrap.querySelector('.qside'), inner = side.firstChild;
+    // 圖框跟著圖的比例：圖的高度不能超過可用的高度，所以寬度最多＝可用高度 × 寬高比
+    const pic = wrap.querySelector('.qpic');
+    const maxW = Math.floor(wrap.clientHeight * ((pic && +pic.dataset.ar) || lastAr));
+    const labels = [...inner.querySelectorAll('.bar-label')]; // 長條圖裡的選項字：被擠成兩行也算排不下（11/17：圖放大後右欄變窄）
     for (const [w, z] of (wrap.dataset.text ? FIT_TEXT : FIT)) {
-      wrap.style.setProperty('--picw', w + 'vw');
+      wrap.style.setProperty('--picw', `min(${w}vw, ${maxW}px)`);
       inner.style.zoom = z;
-      if (inner.getBoundingClientRect().height <= side.clientHeight + 1) return;
+      if (inner.getBoundingClientRect().height <= side.clientHeight + 1 && labels.every((l) => l.scrollHeight <= l.clientHeight + 1)) return;
     }
   }
   // 帶圖題目左邊那張圖：讀法、門禁、重試都跟整面放圖（drawPic）一樣；讀不到時只有這一塊顯示提示，右邊題目照常
-  function picPanel(q) {
+  // cls：'qpic'＝帶圖題目左邊的圖框（跟著圖的比例）；'opic'＝口頭題下面整塊放圖
+  function picPanel(q, cls = 'qpic') {
     const key = `${state.set}|${q.id}|${q.img}`;
     if (qpic && qpic.key === key) return qpic.node;
     const setId = state.set;
     const img = el('img', { class: 'pic-img', alt: '', style: 'visibility:hidden' });
     const msg = el('div', { class: 'pic-msg' }, '圖片載入中…');
-    const node = el('div', { class: 'qpic' }, img, msg);
+    const node = el('div', { class: cls, style: `--ar:${lastAr}`, 'data-ar': String(lastAr) }, img, msg);
+    // 圖讀進來：圖框改成這張圖自己的寬高比，再排一次（右邊排不下時圖寬度要跟著算）
+    img.addEventListener('load', () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      const ar = img.naturalWidth / img.naturalHeight;
+      lastAr = ar; node.dataset.ar = String(ar); node.style.setProperty('--ar', String(ar));
+      const w = node.closest('.withpic'); if (w) fitPic(w);
+    });
     qpic = { key, node };
     const alive = () => qpic && qpic.key === key;
     const tryLoad = () => cacheFor(setId).get(q.img).then((src) => {
@@ -261,7 +289,7 @@ async function main() {
     const setId = state.set;
     const img = el('img', { class: 'pic-img', alt: '', style: 'visibility:hidden' });
     const msg = el('div', { class: 'pic-msg' }, '圖片載入中…');
-    show(el('div', { class: 'pic' }, img, msg, el('div', { class: 'pic-no' }, q.total ? `${+q.img} / ${q.total}` : q.img)));
+    show(el('div', { class: 'pic' }, img, msg, q.total ? el('div', { class: 'pic-no' }, `${+q.img} / ${q.total}`) : null)); // 沒有 total（封面）＝右下角不顯示第幾張
     const tryLoad = () => cacheFor(setId).get(q.img).then((src) => {
       if (picKey !== key) return;
       img.src = src; img.style.visibility = ''; msg.remove();
@@ -304,14 +332,18 @@ async function main() {
 
   // 長條圖：每個選項一列，寬度＝該選項人數 ÷ 作答人數；超過 6 個選項改矮一點的列（11 列也放得進 1080p）
   // 複選題一人可選多項，所以各列加起來會超過 100%，下面補一行說明
+  // 題目有 answer（11/17 加）：最左邊多一欄，答案那幾列打綠色 ✓、長條加綠框，其他列淡掉（長條圖只在按「顯示結果」後才出現，所以答案也是那時才出現）
   function bars(q, ans) {
     const { counts, respondents } = tally(q, ans);
     const total = respondents || 1;
     const n = q.options.length;
-    const list = el('div', { class: 'bars' + (n > 6 ? ' dense' : '') }, q.options.map((opt, i) => {
+    const right = answerSet(q);
+    const list = el('div', { class: 'bars' + (n > 6 ? ' dense' : '') + (right ? ' has-ans' : '') }, q.options.map((opt, i) => {
       const pct = Math.round(counts[i] / total * 100);
       const b = optBadge(opt, i, n);
-      return el('div', { class: 'bar-row' },
+      const ok = !!(right && right.has(i));
+      return el('div', { class: 'bar-row' + (right ? (ok ? ' right' : ' dim') : '') },
+        right ? el('div', { class: 'ans-mark' + (ok ? ' on' : '') }, ok ? '✓' : '') : null,
         el('div', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label),
         el('div', { class: 'bar-track' },
           el('div', { class: 'bar-fill', style: `width:${counts[i] ? Math.max(pct, 4) : 0}%;background:${b.bg};opacity:.45` }),

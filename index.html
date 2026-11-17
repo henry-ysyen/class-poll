@@ -12,7 +12,7 @@
 <div id="app"><div class="wait">載入中…</div></div>
 <script type="module">
 import { createStore, qs, el, $, optBadge, createImageCache } from './store.js';
-import { findQuestion, DEFAULT_ROOM, DEFAULT_N } from './questions.js';
+import { findQuestion, DEFAULT_ROOM, DEFAULT_N, answerSet } from './questions.js';
 
 const app = $('#app');
 const room = qs('r', DEFAULT_ROOM);
@@ -90,7 +90,9 @@ async function main() {
     const gallery = !!(q && q.type === 'gallery'); // 自己看圖：整個畫面拿來放圖
     document.body.classList.toggle('galmode', gallery);
     if (gallery) return showGallery(q);
-    const slide = !!(q && (q.type === 'slide' || q.type === 'pic')); // 投影頁（點字對照表揭曉、投影圖片）：平板不作答，只叫學生看投影幕
+    // 投影頁（點字對照表揭曉、投影圖片）與口頭題（oral，11/17 加）：平板不作答，只叫學生看投影幕
+    const slide = !!(q && (q.type === 'slide' || q.type === 'pic' || q.type === 'oral'));
+    const oral = slide && q.type === 'oral';
     if (!q || slide) {
       if (unsubAns) { unsubAns(); unsubAns = null; myAns = null; lastKey = ''; }
       const cover = !!(state && state.screen === 'cover');
@@ -99,8 +101,8 @@ async function main() {
       lastDraw = key;
       app.replaceChildren(head(), el('div', { class: 'card idle' },
         el('div', { class: 'big-seat' }, seat),
-        el('div', { class: 'idle-text' }, slide ? '眼睛看投影幕' : cover ? '請把平板蓋上' : '已加入 ✓'),
-        el('div', { class: 'muted', style: 'font-size:22px' }, slide ? (q.student || '') : cover ? '眼睛看老師' : '請把平板蓋上，眼睛看老師'),
+        el('div', { class: 'idle-text' }, oral ? '這一題用說的' : slide ? '眼睛看投影幕' : cover ? '請把平板蓋上' : '已加入 ✓'),
+        el('div', { class: 'muted', style: 'font-size:22px' }, oral ? '眼睛看投影幕，想說的人舉手' : slide ? (q.student || '') : cover ? '眼睛看老師' : '請把平板蓋上，眼睛看老師'),
       ));
       return;
     }
@@ -169,12 +171,14 @@ async function main() {
   }
 
   function draw(q, key) {
-    const open = !!state.open;
-    const drawKey = `${key}|${open}`;
+    // 公布答案（11/17 加）：題目有 answer、老師按了「顯示結果」才標出答案；公布後選項鎖住，不能再改（沒有 answer 的題目跟以前一樣）
+    const right = state.show ? answerSet(q) : null;
+    const open = !!state.open && !right;
+    const drawKey = `${key}|${open}|${!!right}`;
     if (drawKey === lastDraw) return patch(q, open); // 題目與開關都沒變：只更新「已送出」那幾個字
     lastDraw = drawKey;
-    ui = {};
-    const card = el('div', { class: 'card' },
+    ui = { right };
+    const card = el('div', { class: 'card' + (right ? ' reveal' : '') },
       q.tag ? el('div', { class: 'q-tag' }, q.tag) : null,
       el('div', { class: 'q-text' }, q.text),
     );
@@ -194,8 +198,9 @@ async function main() {
         return el('button', {
           class: 'opt' + (grid ? (String(opt).length <= 2 ? ' cell' : ' cell wide') : ''), disabled: open ? null : 'disabled',
           onclick: () => (multi ? pickMulti(i) : store.set(key, { v: opt, i, t: Date.now() })),
-        }, grid ? el('span', {}, opt) : [el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', { class: 'grow' }, opt), multi ? el('span', { class: 'tick' }) : null]);
+        }, grid ? el('span', {}, opt) : [el('span', { class: 'letter', style: `background:${b.bg};color:${b.ink}` }, b.label), el('span', { class: 'grow' }, opt), multi && !right ? el('span', { class: 'tick' }) : null, right ? el('span', { class: 'ans' }) : null]);
       });
+      if (right) ui.opts.forEach((b, i) => b.classList.toggle('right', right.has(i)));
       card.append(...(grid ? [el('div', { class: 'opt-grid' }, ui.opts)] : ui.opts));
       ui.status = el('div', { class: 'status muted' });
       card.append(ui.status);
@@ -204,12 +209,13 @@ async function main() {
       input.value = draft || (myAns && myAns.v ? strip(q, myAns.v) : '');
       if (!open) input.disabled = true;
       input.addEventListener('input', () => { draft = input.value; });
-      // 學生自己又打了句首（例如「因為」「我聽到」）就先拿掉，免得變成「因為因為…」
-      const send = () => { let t = input.value.trim(); if (q.prefix && t.startsWith(q.prefix)) t = t.slice(q.prefix.length).trim(); if (!t) return; store.set(key, { v: (q.prefix + t).slice(0, 200), t: Date.now() }); };
+      // 學生自己又打了句首（例如「因為」「我聽到」）就先拿掉，免得變成「因為因為…」；沒有句首的題目（11/17 第 2 節問答 ④）就照打的存
+      const send = () => { let t = input.value.trim(); if (q.prefix && t.startsWith(q.prefix)) t = t.slice(q.prefix.length).trim(); if (!t) return; store.set(key, { v: ((q.prefix || '') + t).slice(0, 200), t: Date.now() }); };
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
       ui.send = el('button', { class: 'primary big', style: 'width:100%', disabled: open ? null : 'disabled', onclick: send }, '送出');
       ui.status = el('div', { class: 'status muted' });
-      card.append(el('div', { class: 'prefix' }, q.prefix + '……'), input, el('div', { style: 'height:10px' }), ui.send, ui.status);
+      if (q.prefix) card.append(el('div', { class: 'prefix' }, q.prefix + '……')); // 沒有句首就不放這一行（append 收到 null 會印出「null」，所以分開寫）
+      card.append(input, el('div', { style: 'height:10px' }), ui.send, ui.status);
     }
     app.replaceChildren(head(), card);
     patch(q, open);
@@ -222,9 +228,12 @@ async function main() {
       const sel = q.type === 'multi' ? picked.includes(i) : !!(myAns && myAns.i === i);
       b.classList.toggle('sel', sel);
       const t = b.querySelector('.tick'); if (t) t.textContent = sel ? '✓' : '';
+      const a = b.querySelector('.ans'); // 公布答案後：答案打「✓ 答案」、自己選的寫「你選的」
+      if (a) { const ok = ui.right.has(i); a.textContent = ok && sel ? '✓ 答案（你選的）' : ok ? '✓ 答案' : sel ? '你選的' : ''; }
     });
     if (ui.send) ui.send.textContent = answered ? '再送一次（改句子）' : '送出';
     if (!ui.status) return;
+    if (ui.right) { ui.status.className = 'status ok'; ui.status.textContent = '老師公布答案了：綠色＝答案'; return; }
     ui.status.className = 'status ' + (answered ? 'ok' : 'muted');
     if (!open) ui.status.textContent = answered ? '已送出 ✓　作答已結束' : '作答已結束';
     else if (answered) ui.status.textContent = q.type === 'choice' ? '已送出 ✓　還可以改' : q.type === 'multi' ? `已選 ${picked.length} 個 ✓　還可以再點，再點一次取消` : `已送出 ✓　「${myAns.v}」`;
