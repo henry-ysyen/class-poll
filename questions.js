@@ -72,7 +72,7 @@ export const SETS = {
       { id: 'k1', tag: '問答 ①', type: 'multi', text: '這一頁，哪些是阿步「想像」出來的？（可複選）', options: ['鯊魚', '海浪', '木頭船', '他身上的海盜背心'], img: '03', answer: ['鯊魚', '海浪', '他身上的海盜背心'] },
       { id: 'o1', tag: '追問 ①', type: 'oral', text: '你是怎麼看出來的？', img: '03' },
       pic2('04'),
-      { id: 'k2', tag: '問答 ②', type: 'choice', text: '阿步現在的心情是？', options: ['很開心', '普通', '有點不高興', '很生氣'], img: '04', answer: '有點不高興' },
+      { id: 'k2', tag: '問答 ②', type: 'choice', text: '阿步現在的心情是？', options: ['很開心', '普通', '有點不高興', '很害怕'], img: '04', answer: '有點不高興' }, // 11/17 晚 Henry：D 原本「很生氣」跟答案太近、有爭議，換成方向明顯不同的
       { id: 'o2', tag: '追問 ②', type: 'oral', text: '你怎麼知道？', img: '04' },
       pic2('07'),
       { id: 'k3a', tag: '問答 ③', type: 'choice', text: '問問題的小朋友覺得——', options: ['好玩', '不好玩'], img: '07', answer: '好玩' },
